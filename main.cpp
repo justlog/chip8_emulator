@@ -36,10 +36,10 @@ std::vector<char> LoadROM(const char* path){
 }
 //
 // Screen dimensions
-const int SCREEN_WIDTH = 64;
-const int SCREEN_HEIGHT = 32;
 const u8 CHIP8_DISPLAY_WIDTH = 64;
 const u8 CHIP8_DISPLAY_HEIGHT = 32;
+const int SCREEN_WIDTH = 4*CHIP8_DISPLAY_WIDTH;
+const int SCREEN_HEIGHT = 4*CHIP8_DISPLAY_HEIGHT;
 
 /*
 	* Font to be used
@@ -218,11 +218,11 @@ int main(int argc, char* argv[]) {
 		u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
 
 		u8 op = MASK_OP(inst);
-		u8 X = inst & X_MASK;
-		u8 Y = inst & Y_MASK;
-		u8 N = inst & N_MASK;
-		u8 NN = inst & NN_MASK;
-		u16 NNN = inst & NNN_MASK;
+		u8 X = MASK_X(inst);
+		u8 Y = MASK_Y(inst);
+		u8 N = MASK_N(inst);
+		u8 NN = MASK_NN(inst);
+		u16 NNN = MASK_NNN(inst);
 
 		switch(op){
 			case Operation::CLEAR_SCREEN:
@@ -259,7 +259,9 @@ int main(int argc, char* argv[]) {
                                 SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                             }
                             //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
-                            SDL_RenderDrawPoint(renderer, column, row);
+                            u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
+                            u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
+                            SDL_RenderDrawPoint(renderer, column * scaleX, row * scaleY);
                         }
                     }
                 }
