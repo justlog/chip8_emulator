@@ -2,9 +2,7 @@
 #include <iostream>
 #include <cstdint>
 
-// Screen dimensions
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 600;
+
 
 typedef int8_t   i8;
 typedef int16_t  i16;
@@ -15,6 +13,12 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 typedef bool b8;
+//
+// Screen dimensions
+const int SCREEN_WIDTH = 64;
+const int SCREEN_HEIGHT = 32;
+const u8 CHIP8_DISPLAY_WIDTH = 64;
+const u8 CHIP8_DISPLAY_HEIGHT = 32;
 
 /*
 	* Font to be used
@@ -41,28 +45,28 @@ struct Chip8Context {
 	i16 PC;
 	i16 indexRegister;
 	i16 *stack; //TODO: What is the size?
-	i8 delayTimer;
-	i8 soundTimer;
+	u8 delayTimer;
+	u8 soundTimer;
 	union {
 		struct {
-			i8 V0;
-			i8 V1;
-			i8 V2;
-			i8 V3;
-			i8 V4;
-			i8 V5;
-			i8 V6;
-			i8 V7;
-			i8 V8;
-			i8 V9;
-			i8 VA;
-			i8 VB;
-			i8 VC;
-			i8 VD;
-			i8 VE;
-			i8 VF;
+			u8 V0;
+			u8 V1;
+			u8 V2;
+			u8 V3;
+			u8 V4;
+			u8 V5;
+			u8 V6;
+			u8 V7;
+			u8 V8;
+			u8 V9;
+			u8 VA;
+			u8 VB;
+			u8 VC;
+			u8 VD;
+			u8 VE;
+			u8 VF;
 		};
-		i8 registers[16];
+		u8 registers[16];
 	} GPRegisters;
 	union{
 		struct{
@@ -184,17 +188,37 @@ int main(int argc, char* argv[]) {
 
 		switch(op){
 			case Operation::CLEAR_SCREEN:
-			break;
+                // Clear screen with black
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_RenderClear(renderer);
+                break;
+            case Operation::JUMP:
+                ctx.PC = NNN;
+                break;
+            case Operation::DRAW:
+                {
+                    u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
+                    u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
+                }
+                break;
+            case Operation::SET_REGISTER_X:
+                ctx.GPRegisters.registers[X] = NN;
+                break;
+            case Operation::ADD_VALUE_TO_X:
+                ctx.GPRegisters.registers[X] += NN;
+                break;
+            case Operation::SET_INDEX_I:
+                ctx.indexRegister = NNN;
+                break;
 		}
 		// Clear screen with black
-		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-		SDL_RenderClear(renderer);
+		// SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		// SDL_RenderClear(renderer);
 
 		// Set draw color to red and draw a rectangle
-		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-		SDL_Rect rect = { SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 50, 100, 100 };
-		SDL_RenderFillRect(renderer, &rect);
-
+		// SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+		// SDL_Rect rect = { SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 50, 100, 100 };
+		// SDL_RenderFillRect(renderer, &rect);
 
 		// Update screen
 		SDL_RenderPresent(renderer);
