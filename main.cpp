@@ -38,8 +38,8 @@ std::vector<char> LoadROM(const char* path){
 // Screen dimensions
 const u8 CHIP8_DISPLAY_WIDTH = 64;
 const u8 CHIP8_DISPLAY_HEIGHT = 32;
-const int SCREEN_WIDTH = 4*CHIP8_DISPLAY_WIDTH;
-const int SCREEN_HEIGHT = 4*CHIP8_DISPLAY_HEIGHT;
+const int SCREEN_WIDTH = 8*CHIP8_DISPLAY_WIDTH;
+const int SCREEN_HEIGHT = 8*CHIP8_DISPLAY_HEIGHT;
 
 /*
 	* Font to be used
@@ -261,7 +261,8 @@ int main(int argc, char* argv[]) {
                             //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
                             u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
                             u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
-                            SDL_RenderDrawPoint(renderer, column * scaleX, row * scaleY);
+                            // SDL_RenderDrawPoint(renderer, column * scaleX, row * scaleY);
+                            SDL_RenderDrawPoint(renderer, column, row);
                         }
                     }
                 }
