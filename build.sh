@@ -1,1 +1,1 @@
-g++ main.cpp -o sdl_app -lSDL2
+g++ -g main.cpp -o sdl_app -lSDL2

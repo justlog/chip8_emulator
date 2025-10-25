@@ -1,6 +1,8 @@
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <cstdint>
+#include <fstream>
+#include <vector>
 
 
 
@@ -13,6 +15,25 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 typedef bool b8;
+std::vector<char> LoadROM(const char* path){
+    std::ifstream inputFile(path, std::ios::binary);
+    if (!inputFile){
+        std::cerr << "Unable to open file " << path << std::endl;
+        exit(1);
+    }
+    inputFile.seekg(0, std::ios::end);
+    std::streamsize fileSize = inputFile.tellg();
+    inputFile.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(fileSize);
+    if(inputFile.read(buffer.data(), fileSize)){
+        return buffer;
+    }
+    else{
+        std::cerr << "Error reading file " << path << std::endl;
+        exit(1);
+    }
+}
 //
 // Screen dimensions
 const int SCREEN_WIDTH = 64;
@@ -41,9 +62,9 @@ const u8 CHIP8_DISPLAY_HEIGHT = 32;
 */
 struct Chip8Context {
 	i8 *ram;
-	b8 display[64][32];
-	i16 PC;
-	i16 indexRegister;
+	b8 display[CHIP8_DISPLAY_WIDTH][CHIP8_DISPLAY_HEIGHT];
+	u16 PC;
+	u16 indexRegister;
 	i16 *stack; //TODO: What is the size?
 	u8 delayTimer;
 	u8 soundTimer;
@@ -104,7 +125,7 @@ void InitChip8Context(Chip8Context* ctx){
 	if(!ctx->stack) {
 		MEM_ALLOC_ERR();
 	}
-	ctx->PC = 200;
+	ctx->PC = 0x200;
 }
 
 constexpr u16 OP_MASK = 15 << 12;
@@ -113,6 +134,13 @@ constexpr u16 Y_MASK = 15 << 4;
 constexpr u16 N_MASK = 15 << 0;
 constexpr u16 NN_MASK = 255 << 0;
 constexpr u16 NNN_MASK = 4095;
+
+#define MASK_OP(inst) (u8)(((inst) & OP_MASK) >> 12)
+#define MASK_X(inst) (u8)(((inst) & X_MASK) >> 8)
+#define MASK_Y(inst) (u8)(((inst) & Y_MASK) >> 4)
+#define MASK_N(inst) (u8)(((inst) & N_MASK) >> 0)
+#define MASK_NN(inst) (u8)(((inst) & NN_MASK) >> 0)
+#define MASK_NNN(inst) (u16)(((inst) & NNN_MASK) >> 0)
 
 
 enum Operation {
@@ -126,6 +154,10 @@ enum Operation {
 
 int main(int argc, char* argv[]) {
 	// Initialize SDL
+    if(argc < 2){
+        std::cerr << "Need to supply CHIP8 emulator with a ROM." << std::endl;
+        return 1;
+    }
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
 		return 1;
@@ -158,6 +190,11 @@ int main(int argc, char* argv[]) {
 	Chip8Context ctx = {0};
 	InitChip8Context(&ctx);
 	//TODO: Load game into ram
+    auto buffer = LoadROM(argv[1]);
+    for(auto byte : buffer){
+        ctx.ram[ctx.PC++] = byte;
+    }
+    ctx.PC = 0x200;
 
 
 
@@ -170,6 +207,7 @@ int main(int argc, char* argv[]) {
 	while (!quit) {
 		// Handle events
 		while (SDL_PollEvent(&e) != 0) {
+            std::cout << "in poll event" << std::endl;
 			if (e.type == SDL_QUIT)
 				quit = true;
 			if (e.type == SDL_KEYDOWN){//TODO Controls
@@ -177,14 +215,14 @@ int main(int argc, char* argv[]) {
 		}
 		u8 byte1 = ctx.ram[ctx.PC++];
 		u8 byte2 = ctx.ram[ctx.PC++];
-		u16 inst = (((u16)byte1) << 8) & ((u16)byte2);
+		u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
 
-		u8 op = inst & OP_MASK;
+		u8 op = MASK_OP(inst);
 		u8 X = inst & X_MASK;
 		u8 Y = inst & Y_MASK;
 		u8 N = inst & N_MASK;
 		u8 NN = inst & NN_MASK;
-		u8 NNN = inst & NNN_MASK;
+		u16 NNN = inst & NNN_MASK;
 
 		switch(op){
 			case Operation::CLEAR_SCREEN:
@@ -199,6 +237,31 @@ int main(int argc, char* argv[]) {
                 {
                     u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
                     u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
+                    u8 countBytes = N;
+                    for(u8 row = 0; row < countBytes; row++){
+                        u8 pixelByte = ctx.ram[ctx.indexRegister+row];
+                        for(u8 pixel = 0; pixel < 8; pixel++){
+                            b8 color = pixelByte & (1 << pixel);
+                            if(x+pixel < CHIP8_DISPLAY_WIDTH && y+row < CHIP8_DISPLAY_HEIGHT){
+                                ctx.display[y+row][x+pixel] ^= color;
+                            }
+                        }
+                    }
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                    SDL_RenderClear(renderer);
+                    //TODO: SLOW, Optimize to use a texture.
+                    for(u32 row = 0; row < CHIP8_DISPLAY_HEIGHT; ++row){
+                        for(u32 column = 0; column < CHIP8_DISPLAY_WIDTH; ++column){
+                            if(ctx.display[row][column]){
+                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                            }
+                            else{
+                                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                            }
+                            //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
+                            SDL_RenderDrawPoint(renderer, column, row);
+                        }
+                    }
                 }
                 break;
             case Operation::SET_REGISTER_X:
