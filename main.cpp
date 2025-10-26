@@ -174,6 +174,7 @@ enum Operation {
   SNE_REG = 0x9000,
 	SET_REGISTER_X = 0x6000,
 	ADD_VALUE_TO_X = 0x7000,
+  LD_X_FROM_Y = 0x8000,
 	SET_INDEX_I = 0xA000,
 	DRAW = 0xD000
 };
@@ -240,6 +241,46 @@ std::string OperationToString(u16 inst){
   }
 }
 
+//Currently uses SDL's built-in integer scaling. Could implement it myself.
+//Also currently draws each point to the screen separately, should use a texture instead. 
+void DrawDisplay(Chip8Context& ctx, u8 X, u8 Y)
+{
+  u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
+  u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
+  u8 countBytes = N;
+  for(u8 row = 0; row < countBytes; row++){
+    u8 pixelByte = ctx.ram[ctx.indexRegister+row];
+    for(u8 pixel = 0; pixel < 8; pixel++){
+      b8 color = pixelByte & (1 << pixel);
+      u8 cellX = x+7-pixel;//Draw from most significant bit to least significant bit
+      u8 cellY = y+row;
+      if(cellX < CHIP8_DISPLAY_WIDTH && cellY < CHIP8_DISPLAY_HEIGHT){
+        ctx.display[cellY][cellX] ^= color;
+      }
+    }
+  }
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+  SDL_RenderClear(renderer);
+  //TODO: SLOW, Optimize to use a texture.
+  for(u32 row = 0; row < CHIP8_DISPLAY_HEIGHT; ++row){
+    for(u32 column = 0; column < CHIP8_DISPLAY_WIDTH; ++column){
+      if(ctx.display[row][column]){
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+      }
+      else{
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+      }
+      //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
+      // u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
+      // u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
+      // for(u32 i = 0; i < scaleX; i++)
+      //   for(u32 j = 0; j < scaleY; j++){
+      //     SDL_RenderDrawPoint(renderer, column*scaleX + i, row*scaleY + j);
+      //   }
+      SDL_RenderDrawPoint(renderer, column, row);
+    }
+  }
+}
 int main(int argc, char* argv[]) {
 	// Initialize SDL
     if(argc < 2){
@@ -274,6 +315,9 @@ int main(int argc, char* argv[]) {
 		SDL_Quit();
 		return 1;
 	}
+  //NOTE: Using SDL built-in integer scaling. If I want to, I could try to implement this myself.
+  SDL_RenderSetLogicalSize(renderer, CHIP8_DISPLAY_WIDTH, CHIP8_DISPLAY_HEIGHT);
+  SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
 
 	Chip8Context ctx = {0};
 	InitChip8Context(&ctx);
@@ -361,37 +405,7 @@ int main(int argc, char* argv[]) {
           break;
         case Operation::DRAW:
           {
-            u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
-            u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
-            u8 countBytes = N;
-            for(u8 row = 0; row < countBytes; row++){
-              u8 pixelByte = ctx.ram[ctx.indexRegister+row];
-              for(u8 pixel = 0; pixel < 8; pixel++){
-                b8 color = pixelByte & (1 << pixel);
-                u8 cellX = x+8-pixel;//Draw from most significant bit to least significant bit
-                u8 cellY = y+row;
-                if((x+8-pixel) < CHIP8_DISPLAY_WIDTH && (y+row) < CHIP8_DISPLAY_HEIGHT){
-                  ctx.display[cellY][cellX] ^= color;
-                }
-              }
-            }
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderClear(renderer);
-            //TODO: SLOW, Optimize to use a texture.
-            for(u32 row = 0; row < CHIP8_DISPLAY_HEIGHT; ++row){
-              for(u32 column = 0; column < CHIP8_DISPLAY_WIDTH; ++column){
-                if(ctx.display[row][column]){
-                  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-                }
-                else{
-                  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                }
-                //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
-                // u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
-                // u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
-                SDL_RenderDrawPoint(renderer, column + SCREEN_WIDTH/2 - CHIP8_DISPLAY_WIDTH/2, row + SCREEN_HEIGHT/2 - CHIP8_DISPLAY_HEIGHT/2);
-              }
-            }
+            DrawDisplay(ctx, X, Y);
           }
           break;
         case Operation::SET_REGISTER_X:
