@@ -1,4 +1,9 @@
-#include <SDL2/SDL.h>
+#if defined(_WIN32)
+  #include <SDL.h>
+#else
+  #include <SDL2/SDL.h>
+#endif
+
 #include <iostream>
 #include <cstdint>
 #include <fstream>
@@ -62,7 +67,7 @@ const int SCREEN_HEIGHT = 8*CHIP8_DISPLAY_HEIGHT;
 */
 struct Chip8Context {
 	i8 *ram;
-	b8 display[CHIP8_DISPLAY_WIDTH][CHIP8_DISPLAY_HEIGHT];
+	b8 display[CHIP8_DISPLAY_HEIGHT][CHIP8_DISPLAY_WIDTH];
 	u16 PC;
 	u16 indexRegister;
 	i16 *stack; //TODO: What is the size?
@@ -151,6 +156,30 @@ enum Operation {
 	SET_INDEX_I = 0xA,
 	DRAW = 0xD
 };
+std::string OperationToString(Operation o){
+  switch(o){
+    case CLEAR_SCREEN:
+      return "CLEAR_SCREEN";
+      break;
+    case JUMP:
+      return "JUMP";
+      break;
+    case SET_REGISTER_X:
+      return "SET_REGISTER_X";
+      break;
+    case ADD_VALUE_TO_X:
+      return "ADD_VALUE_TO_X";
+      break;
+    case SET_INDEX_I:
+      return "SET_INDEX_I";
+      break;
+    case DRAW:
+      return "DRAW";
+      break;
+    default:
+      break;
+  }
+}
 
 int main(int argc, char* argv[]) {
 	// Initialize SDL
@@ -203,91 +232,97 @@ int main(int argc, char* argv[]) {
 	SDL_Event e;
 
 	
+  u32 cycle = 1;
+  u8 tick = false;
 	// Main loop
 	while (!quit) {
 		// Handle events
 		while (SDL_PollEvent(&e) != 0) {
-            std::cout << "in poll event" << std::endl;
 			if (e.type == SDL_QUIT)
 				quit = true;
-			if (e.type == SDL_KEYDOWN){//TODO Controls
+			if (e.type == SDL_KEYUP){//TODO Controls
+        if(e.key.keysym.sym == SDLK_SPACE){
+          tick = true;
+        }
 			}
 		}
-		u8 byte1 = ctx.ram[ctx.PC++];
-		u8 byte2 = ctx.ram[ctx.PC++];
-		u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
+    if(tick){
+      u8 byte1 = ctx.ram[ctx.PC++];
+      u8 byte2 = ctx.ram[ctx.PC++];
+      u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
 
-		u8 op = MASK_OP(inst);
-		u8 X = MASK_X(inst);
-		u8 Y = MASK_Y(inst);
-		u8 N = MASK_N(inst);
-		u8 NN = MASK_NN(inst);
-		u16 NNN = MASK_NNN(inst);
+      u8 op = MASK_OP(inst);
+      u8 X = MASK_X(inst);
+      u8 Y = MASK_Y(inst);
+      u8 N = MASK_N(inst);
+      u8 NN = MASK_NN(inst);
+      u16 NNN = MASK_NNN(inst);
 
-		switch(op){
-			case Operation::CLEAR_SCREEN:
-                // Clear screen with black
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                SDL_RenderClear(renderer);
-                break;
-            case Operation::JUMP:
-                ctx.PC = NNN;
-                break;
-            case Operation::DRAW:
-                {
-                    u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
-                    u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
-                    u8 countBytes = N;
-                    for(u8 row = 0; row < countBytes; row++){
-                        u8 pixelByte = ctx.ram[ctx.indexRegister+row];
-                        for(u8 pixel = 0; pixel < 8; pixel++){
-                            b8 color = pixelByte & (1 << pixel);
-                            if(x+pixel < CHIP8_DISPLAY_WIDTH && y+row < CHIP8_DISPLAY_HEIGHT){
-                                ctx.display[y+row][x+pixel] ^= color;
-                            }
-                        }
-                    }
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                    SDL_RenderClear(renderer);
-                    //TODO: SLOW, Optimize to use a texture.
-                    for(u32 row = 0; row < CHIP8_DISPLAY_HEIGHT; ++row){
-                        for(u32 column = 0; column < CHIP8_DISPLAY_WIDTH; ++column){
-                            if(ctx.display[row][column]){
-                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-                            }
-                            else{
-                                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                            }
-                            //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
-                            u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
-                            u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
-                            // SDL_RenderDrawPoint(renderer, column * scaleX, row * scaleY);
-                            SDL_RenderDrawPoint(renderer, column, row);
-                        }
-                    }
+      std::cout << "cycle " << cycle << " performing " << OperationToString(Operation(op)) << std::endl;
+      switch(op){
+        case Operation::CLEAR_SCREEN:
+          // Clear screen with black
+          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+          SDL_RenderClear(renderer);
+          break;
+        case Operation::JUMP:
+          ctx.PC = NNN;
+          break;
+        case Operation::DRAW:
+          {
+            u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
+            u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
+            u8 countBytes = N;
+            for(u8 row = 0; row < countBytes; row++){
+              u8 pixelByte = ctx.ram[ctx.indexRegister+row];
+              for(u8 pixel = 0; pixel < 8; pixel++){
+                b8 color = pixelByte & (1 << pixel);
+                u8 cellX = x+8-pixel;//Draw from most significant bit to least significant bit
+                u8 cellY = y+row;
+                if((x+8-pixel) < CHIP8_DISPLAY_WIDTH && (y+row) < CHIP8_DISPLAY_HEIGHT){
+                  ctx.display[cellY][cellX] ^= color;
                 }
-                break;
-            case Operation::SET_REGISTER_X:
-                ctx.GPRegisters.registers[X] = NN;
-                break;
-            case Operation::ADD_VALUE_TO_X:
-                ctx.GPRegisters.registers[X] += NN;
-                break;
-            case Operation::SET_INDEX_I:
-                ctx.indexRegister = NNN;
-                break;
-		}
-		// Clear screen with black
-		// SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-		// SDL_RenderClear(renderer);
+              }
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderClear(renderer);
+            //TODO: SLOW, Optimize to use a texture.
+            for(u32 row = 0; row < CHIP8_DISPLAY_HEIGHT; ++row){
+              for(u32 column = 0; column < CHIP8_DISPLAY_WIDTH; ++column){
+                if(ctx.display[row][column]){
+                  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                }
+                else{
+                  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                }
+                //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
+                u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
+                u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
+                // SDL_RenderDrawPoint(renderer, column * scaleX, row * scaleY);
+                SDL_RenderDrawPoint(renderer, column + SCREEN_WIDTH/2 - CHIP8_DISPLAY_WIDTH/2, row + SCREEN_HEIGHT/2 - CHIP8_DISPLAY_HEIGHT/2);
+              }
+            }
+          }
+          break;
+        case Operation::SET_REGISTER_X:
+          ctx.GPRegisters.registers[X] = NN;
+          break;
+        case Operation::ADD_VALUE_TO_X:
+          ctx.GPRegisters.registers[X] += NN;
+          break;
+        case Operation::SET_INDEX_I:
+          ctx.indexRegister = NNN;
+          break;
+      }
 
-		// Set draw color to red and draw a rectangle
-		// SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-		// SDL_Rect rect = { SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 50, 100, 100 };
-		// SDL_RenderFillRect(renderer, &rect);
+      // Clear screen with black
+      // SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+      // SDL_RenderClear(renderer);
 
-		// Update screen
-		SDL_RenderPresent(renderer);
+      // Update screen
+      SDL_RenderPresent(renderer);
+      tick = false;
+    }
 	}
 
 	// Clean up

@@ -1,3 +1,13 @@
--I/usr/include/SDL2
+-std=c++20
 -D_REENTRANT
+
+# Linux SDL2 (adjust if needed)
+-I/usr/include/SDL2
+
+# Windows MSYS2/MinGW SDL2 (adjust path if you installed elsewhere)
+-IC:C:\SDL2
+
+# (Optional) Extra common includes:
+# -Iinclude
+# -Isrc
 
