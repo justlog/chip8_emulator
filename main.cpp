@@ -5,9 +5,11 @@
 #endif
 
 #include <iostream>
+#include <unordered_map>
 #include <cstdint>
 #include <fstream>
 #include <vector>
+#include <assert.h>
 
 
 
@@ -65,12 +67,28 @@ const int SCREEN_HEIGHT = 8*CHIP8_DISPLAY_HEIGHT;
 	* 0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
 	* 0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 */
+#define MEM_ALLOC_ERR() std::cerr << "Could not allocate memory! Quitting..."; exit(1);
+//NOTE 1KB? maybe we'll need more? who knows.
+#define STACK_SIZE 1024 
+struct Stack{
+  u16 memory[STACK_SIZE];
+  u32 counter = 0;
+  void Push(u16 address){
+    assert(address < STACK_SIZE);
+    memory[counter++] = address;
+  }
+  u16 Pop(){
+    if(counter > 0){
+      return memory[--counter];
+    }
+  }
+};
 struct Chip8Context {
 	i8 *ram;
 	b8 display[CHIP8_DISPLAY_HEIGHT][CHIP8_DISPLAY_WIDTH];
 	u16 PC;
 	u16 indexRegister;
-	i16 *stack; //TODO: What is the size?
+  Stack stack;
 	u8 delayTimer;
 	u8 soundTimer;
 	union {
@@ -117,19 +135,16 @@ struct Chip8Context {
 	};
 };
 
-#define MEM_ALLOC_ERR() std::cerr << "Could not allocate memory! Quitting..."; exit(1);
-//NOTE 1KB? maybe we'll need more? who knows.
-#define STACK_SIZE 1024 
 void InitChip8Context(Chip8Context* ctx){
-	//Allocate memory for ram and stack
+	//Allocate memory for ram
 	ctx->ram = (i8*)malloc(4096);
 	if(!ctx->ram) {
 		MEM_ALLOC_ERR();
 	}
-	ctx->stack = (i16*)malloc(STACK_SIZE);
-	if(!ctx->stack) {
-		MEM_ALLOC_ERR();
-	}
+	// ctx->stack = (i16*)malloc(STACK_SIZE);
+	// if(!ctx->stack) {
+	// 	MEM_ALLOC_ERR();
+	// }
 	ctx->PC = 0x200;
 }
 
@@ -140,29 +155,72 @@ constexpr u16 N_MASK = 15 << 0;
 constexpr u16 NN_MASK = 255 << 0;
 constexpr u16 NNN_MASK = 4095;
 
-#define MASK_OP(inst) (u8)(((inst) & OP_MASK) >> 12)
-#define MASK_X(inst) (u8)(((inst) & X_MASK) >> 8)
-#define MASK_Y(inst) (u8)(((inst) & Y_MASK) >> 4)
-#define MASK_N(inst) (u8)(((inst) & N_MASK) >> 0)
-#define MASK_NN(inst) (u8)(((inst) & NN_MASK) >> 0)
+#define MASK_OP(inst) (((inst) & OP_MASK) >> 12)
+#define MASK_X(inst) (((inst) & X_MASK) >> 8)
+#define MASK_Y(inst) (((inst) & Y_MASK) >> 4)
+#define MASK_N(inst) (((inst) & N_MASK) >> 0)
+#define MASK_NN(inst) (((inst) & NN_MASK) >> 0)
 #define MASK_NNN(inst) (u16)(((inst) & NNN_MASK) >> 0)
 
 
 enum Operation {
-	CLEAR_SCREEN = 0,
-	JUMP = 1,
-	SET_REGISTER_X = 6,
-	ADD_VALUE_TO_X = 7,
-	SET_INDEX_I = 0xA,
-	DRAW = 0xD
+	CLS = 0x00E0,
+  RET = 0x00EE,
+	JP = 0x1000,
+  CALL = 0x2000,
+  SE_IMM = 0x3000,
+  SNE_IMM = 0x4000,
+  SE_REG = 0x5000,
+  SNE_REG = 0x9000,
+	SET_REGISTER_X = 0x6000,
+	ADD_VALUE_TO_X = 0x7000,
+	SET_INDEX_I = 0xA000,
+	DRAW = 0xD000
 };
-std::string OperationToString(Operation o){
-  switch(o){
-    case CLEAR_SCREEN:
-      return "CLEAR_SCREEN";
+
+// std::unordered_map<Operation, std::string> OperationToString = {
+//   {Operation::CLS , "CLS"},
+//   {Operation::RET , "RET"},
+//   {Operation::JP , "JP"},
+//   {Operation::CALL , "CALL"},
+//   {Operation::SE_IMM , "SE_IMM"},
+//   {Operation::SNE_IMM , "SNE_IMM"},
+//   {Operation::SE_REG , "SE_REG"},
+//   {Operation::SNE_REG , "SNE_REG"},
+//   {Operation::SET_REGISTER_X , "SET_REGISTER_X"},
+//   {Operation::ADD_VALUE_TO_X , "ADD_VALUE_TO_X"},
+//   {Operation::SET_INDEX_I , "SET_INDEX_I"},
+//   {Operation::DRAW , "DRAW"}
+// };
+std::string OperationToString(u16 inst){
+  switch(inst & OP_MASK){
+    case 0:
+      switch(inst){
+        case CLS:
+          return "CLS";
+          break;
+        case RET:
+          return "RET";
+          break;
+      }
       break;
-    case JUMP:
-      return "JUMP";
+    case JP:
+      return "JP";
+      break;
+    case CALL:
+      return "CALL";
+      break;
+    case SE_IMM:
+      return "SE_IMM";
+      break;
+    case SNE_IMM:
+      return "SNE_IMM";
+      break;
+    case SE_REG:
+      return "SE_REG";
+      break;
+    case SNE_REG:
+      return "SNE_REG";
       break;
     case SET_REGISTER_X:
       return "SET_REGISTER_X";
@@ -177,6 +235,7 @@ std::string OperationToString(Operation o){
       return "DRAW";
       break;
     default:
+      return "";
       break;
   }
 }
@@ -233,7 +292,7 @@ int main(int argc, char* argv[]) {
 
 	
   u32 cycle = 1;
-  u8 tick = false;
+  u8 tick = true;
 	// Main loop
 	while (!quit) {
 		// Handle events
@@ -251,21 +310,53 @@ int main(int argc, char* argv[]) {
       u8 byte2 = ctx.ram[ctx.PC++];
       u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
 
-      u8 op = MASK_OP(inst);
-      u8 X = MASK_X(inst);
-      u8 Y = MASK_Y(inst);
-      u8 N = MASK_N(inst);
-      u8 NN = MASK_NN(inst);
-      u16 NNN = MASK_NNN(inst);
+      u8 opPrefix = (u8)MASK_OP(inst);
+      u8 X = (u8)MASK_X(inst);
+      u8 Y = (u8)MASK_Y(inst);
+      u8 N = (u8)MASK_N(inst);
+      u8 NN = (u8)MASK_NN(inst);
+      u16 NNN = (u16)MASK_NNN(inst);
 
-      std::cout << "cycle " << cycle << " performing " << OperationToString(Operation(op)) << std::endl;
-      switch(op){
-        case Operation::CLEAR_SCREEN:
-          // Clear screen with black
-          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-          SDL_RenderClear(renderer);
+      u16 maskedInst = inst & OP_MASK;//NOTE: This is a bad idea, you're masking in two different ways... once in MASK_OP and once like this.
+      std::cout << "cycle " << cycle++ << " performing " << OperationToString(inst) << std::endl;
+      switch(maskedInst){
+        case 0:
+          switch(inst){
+            case Operation::CLS:
+              // Clear screen with black
+              SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+              SDL_RenderClear(renderer);
+              break;
+            case Operation::RET:
+              ctx.PC = ctx.stack.Pop();
+              break;
+          }
           break;
-        case Operation::JUMP:
+        case Operation::CALL:
+          ctx.stack.Push(ctx.PC);
+          ctx.PC = NNN;
+          break;
+        case Operation::SE_IMM:
+          if(ctx.GPRegisters.registers[X] == NN){
+            ctx.PC += 2;
+          }
+          break;
+        case Operation::SNE_IMM:
+          if(ctx.GPRegisters.registers[X] != NN){
+            ctx.PC += 2;
+          }
+          break;
+        case Operation::SE_REG:
+          if(ctx.GPRegisters.registers[X] == ctx.GPRegisters.registers[Y]){
+            ctx.PC += 2;
+          }
+          break;
+        case Operation::SNE_REG:
+          if(ctx.GPRegisters.registers[X] != ctx.GPRegisters.registers[Y]){
+            ctx.PC += 2;
+          }
+          break;
+        case Operation::JP:
           ctx.PC = NNN;
           break;
         case Operation::DRAW:
@@ -296,9 +387,8 @@ int main(int argc, char* argv[]) {
                   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 }
                 //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
-                u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
-                u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
-                // SDL_RenderDrawPoint(renderer, column * scaleX, row * scaleY);
+                // u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
+                // u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
                 SDL_RenderDrawPoint(renderer, column + SCREEN_WIDTH/2 - CHIP8_DISPLAY_WIDTH/2, row + SCREEN_HEIGHT/2 - CHIP8_DISPLAY_HEIGHT/2);
               }
             }
@@ -313,6 +403,9 @@ int main(int argc, char* argv[]) {
         case Operation::SET_INDEX_I:
           ctx.indexRegister = NNN;
           break;
+        default:
+          std::cout << "Could not preform instruction " << std::hex << inst; 
+          break;
       }
 
       // Clear screen with black
@@ -321,7 +414,7 @@ int main(int argc, char* argv[]) {
 
       // Update screen
       SDL_RenderPresent(renderer);
-      tick = false;
+      // tick = false;
     }
 	}
 
