@@ -161,6 +161,11 @@ constexpr u8 FONT[] = {
   0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
+void ClearDisplay(Chip8Context* ctx){
+  for(u32 i = 0; i < CHIP8_DISPLAY_HEIGHT; i++)
+    for(u32 j = 0; j < CHIP8_DISPLAY_WIDTH; j++)
+      ctx->display[i][j] = false;
+}
 void InitChip8Context(Chip8Context* ctx){
 	//Allocate memory for ram
 	ctx->ram = (i8*)malloc(4096);
@@ -503,6 +508,8 @@ int main(int argc, char* argv[]) {
               // Clear screen with black
               SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
               SDL_RenderClear(renderer);
+              SDL_RenderPresent(renderer);
+              ClearDisplay(&ctx);
               break;
             case Operation::RET:
               ctx.PC = ctx.stack.Pop();
