@@ -235,6 +235,27 @@ enum Operation {
   LD_KEY = 0xF00A,
   LD_FONT = 0xF029,//Load I register with the address of font for character in X
   BCD = 0xF033,
+
+
+
+
+  /*
+  * Ambiguous instruction!
+  *
+  * These two instructions store registers to memory, or load them from memory, respectively.
+  *
+  * For FX55, the value of each variable register from V0 to VX inclusive (if X is 0, then only V0) will be stored in successive memory addresses, starting with the one that’s stored in I. V0 will be stored at the address in I, V1 will be stored in I + 1, and so on, until VX is stored in I + X.
+*
+* FX65 does the opposite; it takes the value stored at the memory addresses and loads them into the variable registers instead.
+*
+* The original CHIP-8 interpreter for the COSMAC VIP actually incremented the I register while it worked. Each time it stored or loaded one register, it incremented I. After the instruction was finished, I would end up being set to the new value I + X + 1.
+*
+* However, modern interpreters (starting with CHIP48 and SUPER-CHIP in the early 90s) used a temporary variable for indexing, so when the instruction was finished, I would still hold the same value as it did before.
+*
+  * If you only pick one behavior, go with the modern one that doesn’t actually change the value of I. This will let you run the common CHIP-8 games you find everywhere, and it’s also what the common test ROMs depend on (the other behavior will fail the tests). But if you want your emulator to run older games from the 1970s or 1980s, you should consider making a configurable option in your emulator to toggle between these behaviors.
+*/
+  ST_MEM = 0xF055,
+  LD_MEM = 0xF065,
 };
 
 // std::unordered_map<Operation, std::string> OperationToString = {
@@ -488,7 +509,7 @@ int main(int argc, char* argv[]) {
               break;
           }
           break;
-        case 0xE:
+        case 0xE000:
           switch(inst & 0xE0FF){//Need to mask off X to get the opcode 
             case Operation::SKP:
               if(ctx.registers[X] <= 0xF && ctx.buttons[ctx.registers[X]]){
@@ -502,7 +523,7 @@ int main(int argc, char* argv[]) {
               break;
           }
           break;
-        case 0xF:
+        case 0xF000:
           switch(inst & 0xF0FF){
             case LDX_TIMER:
               ctx.registers[X] = ctx.delayTimer;
@@ -537,11 +558,21 @@ int main(int argc, char* argv[]) {
             case Operation::BCD:
               {
                 u8 b = ctx.registers[X];
-                u8 i = 0;
-                while(b > 0){
-                  ctx.ram[ctx.indexRegister + i++] = b%10;
+                i8 i = 2;
+                while(i >= 0){
+                  ctx.ram[ctx.indexRegister + i--] = b%10;
                   b /= 10;
                 }
+              }
+              break;
+            case Operation::ST_MEM:
+              for(u8 i = 0; i <= X; i++){
+                ctx.ram[ctx.indexRegister + i] = ctx.registers[i];
+              }
+              break;
+            case Operation::LD_MEM:
+              for(u8 i = 0; i <= X; i++){
+                ctx.registers[i] = ctx.ram[ctx.indexRegister + i];
               }
               break;
           }
@@ -633,7 +664,7 @@ int main(int argc, char* argv[]) {
             break;
           }
         default:
-          std::cout << "Could not preform instruction " << std::hex << inst; 
+          std::cout << "Could not preform instruction " << std::hex << inst << std::endl; 
           break;
       }
       ctx.instructionPerformed++;
