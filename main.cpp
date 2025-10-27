@@ -81,6 +81,7 @@ struct Stack{
     if(counter > 0){
       return memory[--counter];
     }
+    return 0;
   }
 };
 struct Chip8Context {
@@ -172,10 +173,15 @@ enum Operation {
   SNE_IMM = 0x4000,
   SE_REG = 0x5000,
   SNE_REG = 0x9000,
-	SET_REGISTER_X = 0x6000,
-	ADD_VALUE_TO_X = 0x7000,
-  LD_X_FROM_Y = 0x8000,
-	SET_INDEX_I = 0xA000,
+	LDX_IMM = 0x6000,
+  LDX_REG = 0x8000,
+  ORX_REG = 0x8001,
+  ANDX_REG = 0x8002,
+  XORX_REG = 0x8003,
+	ADDX_REG = 0x8004,
+  SUBX_REG = 0x8005,
+	ADDX_IMM = 0x7000,
+	SETI = 0xA000,
 	DRAW = 0xD000
 };
 
@@ -223,13 +229,13 @@ std::string OperationToString(u16 inst){
     case SNE_REG:
       return "SNE_REG";
       break;
-    case SET_REGISTER_X:
+    case LDX_IMM:
       return "SET_REGISTER_X";
       break;
-    case ADD_VALUE_TO_X:
+    case ADDX_IMM:
       return "ADD_VALUE_TO_X";
       break;
-    case SET_INDEX_I:
+    case SETI:
       return "SET_INDEX_I";
       break;
     case DRAW:
@@ -243,8 +249,9 @@ std::string OperationToString(u16 inst){
 
 //Currently uses SDL's built-in integer scaling. Could implement it myself.
 //Also currently draws each point to the screen separately, should use a texture instead. 
-void DrawDisplay(Chip8Context& ctx, u8 X, u8 Y)
+void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
 {
+  std::cout << "Draw display function" << std::endl;
   u8 x = ctx.GPRegisters.registers[X] % CHIP8_DISPLAY_WIDTH;
   u8 y = ctx.GPRegisters.registers[Y] % CHIP8_DISPLAY_HEIGHT;
   u8 countBytes = N;
@@ -270,13 +277,6 @@ void DrawDisplay(Chip8Context& ctx, u8 X, u8 Y)
       else{
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
       }
-      //TODO: Upscale to the actual screen size from chip8 screen. Can try integer scaling first for easy scaling.
-      // u32 scaleX = SCREEN_WIDTH/CHIP8_DISPLAY_WIDTH;
-      // u32 scaleY = SCREEN_HEIGHT/CHIP8_DISPLAY_HEIGHT;
-      // for(u32 i = 0; i < scaleX; i++)
-      //   for(u32 j = 0; j < scaleY; j++){
-      //     SDL_RenderDrawPoint(renderer, column*scaleX + i, row*scaleY + j);
-      //   }
       SDL_RenderDrawPoint(renderer, column, row);
     }
   }
@@ -405,16 +405,44 @@ int main(int argc, char* argv[]) {
           break;
         case Operation::DRAW:
           {
-            DrawDisplay(ctx, X, Y);
+            DrawDisplay(renderer, ctx, X, Y, N);
           }
           break;
-        case Operation::SET_REGISTER_X:
+        //---- 0x8000 instructions, need to mask last nibble aswell
+        case 0x8000:
+          switch(inst & 0x800f){
+            case Operation::LDX_REG:
+              ctx.GPRegisters.registers[X] = ctx.GPRegisters.registers[Y];
+              break;
+            case Operation::ORX_REG:
+              ctx.GPRegisters.registers[X] |= ctx.GPRegisters.registers[Y];
+              break;
+            case Operation::ANDX_REG:
+              ctx.GPRegisters.registers[X] &= ctx.GPRegisters.registers[Y];
+              break;
+            case Operation::XORX_REG:
+              ctx.GPRegisters.registers[X] ^= ctx.GPRegisters.registers[Y];
+              break;
+            case Operation::ADDX_REG:
+              {
+                u16 sum = (u16)ctx.GPRegisters.registers[X] + (u16)ctx.GPRegisters.registers[Y];
+                ctx.GPRegisters.VF = sum > 255 ? 1 : 0;
+                ctx.GPRegisters.registers[X] = (u8)sum;
+              }
+              break;
+            case Operation::SUBX_REG:
+              ctx.GPRegisters.VF =  ctx.GPRegisters.registers[X] > ctx.GPRegisters.registers[Y] ? 1 : 0;
+              ctx.GPRegisters.registers[X] -= ctx.GPRegisters.registers[Y];
+              break;
+          }
+          break;
+        case Operation::LDX_IMM:
           ctx.GPRegisters.registers[X] = NN;
           break;
-        case Operation::ADD_VALUE_TO_X:
+        case Operation::ADDX_IMM:
           ctx.GPRegisters.registers[X] += NN;
           break;
-        case Operation::SET_INDEX_I:
+        case Operation::SETI:
           ctx.indexRegister = NNN;
           break;
         default:
