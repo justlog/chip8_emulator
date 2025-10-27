@@ -438,9 +438,10 @@ int main(int argc, char* argv[]) {
   u64 counterFrequency = SDL_GetPerformanceFrequency();
   u64 lastFrame = SDL_GetPerformanceCounter();
   f64 lastTimerTick = 0.0;
-  f64 secondTimer = 0.0;
   constexpr f64 msPerTimerTick = (1.0/60.0) * 1000.0;
   constexpr u32 INST_PER_SECOND = 700;//TODO: https://tobiasvl.github.io/blog/write-a-chip-8-emulator/ claims the speed should be reconfigurable because of different processors it ran on. but it also says a "standard" speed of 700 instructions per second fits well enough for chip8 programs.
+  f64 emulationTimer = 0.0;
+  f64 msPerInst = (1.0/INST_PER_SECOND) * 1000;
 	// Main loop
 	while (!quit) {
     //Timer ticks
@@ -448,7 +449,7 @@ int main(int argc, char* argv[]) {
     u64 currentFrame = SDL_GetPerformanceCounter();
     f64 dt = ((currentFrame - lastFrame) / (f64)counterFrequency) * 1000;//in ms
     lastTimerTick += dt;
-    secondTimer += dt;
+    emulationTimer += dt;
     lastFrame = currentFrame;
     if(lastTimerTick >= msPerTimerTick){
       if(ctx.delayTimer > 0){
@@ -459,11 +460,11 @@ int main(int argc, char* argv[]) {
       }
       lastTimerTick -= msPerTimerTick;
     }
-    if(secondTimer >= 1000.0){
+    if(emulationTimer >= msPerInst){
       if(emulate){
         std::cout << "EMULATION TOO SLOW, ONLY " << ctx.instructionPerformed << " WERE PREFORMED" << std::endl;
       }
-      secondTimer -= 1000.0;
+      emulationTimer -= msPerInst;
       emulate = true;
     }
 
@@ -565,7 +566,7 @@ int main(int argc, char* argv[]) {
             case Operation::BCD:
               {
                 u8 b = ctx.registers[X];
-                i8 i = 2;
+              i8 i = 2;
                 while(i >= 0){
                   ctx.ram[ctx.indexRegister + i--] = b%10;
                   b /= 10;
@@ -677,10 +678,11 @@ int main(int argc, char* argv[]) {
       ctx.instructionPerformed++;
 
 
-      if(ctx.instructionPerformed >= INST_PER_SECOND){
-        ctx.instructionPerformed = 0;
-        emulate = false;
-      }
+      emulate = false;
+      // if(ctx.instructionPerformed >= INST_PER_SECOND){//TODO: This doesn't work well now because it bursts through 700 instructions and then does nothing for the rest of the second. Need to pace the execution throughout the second.
+      //   ctx.instructionPerformed = 0;
+      //   emulate = false;
+      // }
     }
 	}
 
