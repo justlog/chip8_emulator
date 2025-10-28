@@ -243,33 +243,58 @@ enum Operation {
   SENTINEL_OP = 0xFFFF,
 };
 
-// std::unordered_map<Operation, std::string> OperationToString = {
-//   {Operation::CLS , "CLS"},
-//   {Operation::RET , "RET"},
-//   {Operation::JP , "JP"},
-//   {Operation::CALL , "CALL"},
-//   {Operation::SE_IMM , "SE_IMM"},
-//   {Operation::SNE_IMM , "SNE_IMM"},
-//   {Operation::SE_REG , "SE_REG"},
-//   {Operation::SNE_REG , "SNE_REG"},
-//   {Operation::SET_REGISTER_X , "SET_REGISTER_X"},
-//   {Operation::ADD_VALUE_TO_X , "ADD_VALUE_TO_X"},
-//   {Operation::SET_INDEX_I , "SET_INDEX_I"},
-//   {Operation::DRAW , "DRAW"}
-// };
+std::unordered_map<Operation, std::string> OperationToString = {
+  {CLS,"CLS"},
+  {RET,"RET"},
+  {JP,"JP"},
+  {CALL,"CALL"},
+  {SE_IMM,"SE_IMM"},
+  {SNE_IMM,"SNE_IMM"},
+  {SE_REG,"SE_REG"},
+  {SNE_REG,"SNE_REG"},
+  {LDX_IMM,"LDX_IMM"},
+  {LDX_REG,"LDX_REG"},
+  {ORX_REG,"ORX_REG"},
+  {ANDX_REG,"ANDX_REG"},
+  {XORX_REG,"XORX_REG"},
+  {ADDX_REG,"ADDX_REG"},
+  {SUB_REG,"SUB_REG"},
+  {SUBN_REG,"SUBN_REG"},
+  {SHR,"SHR"},
+  {SHL,"SHL"},
+  {ADDX_IMM,"ADDX_IMM"},
+  {SETI,"SETI"},
+  {JPOFFSET,"JPOFFSET"},
+  {RND,"RND"},
+  {SKP,"SKP"},
+  {SKNP,"SKNP"},
+  {DRAW,"DRAW"},
+  {LDX_TIMER,"LDX_TIMER"},
+  {LD_DT,"LD_DT"},
+  {LD_ST,"LD_ST"},
+  {ADDI_X,"ADDI_X"},
+  {LD_KEY,"LD_KEY"},
+  {LD_FONT,"LD_FONT"},
+  {BCD,"BCD"},
+  {ST_MEM,"ST_MEM"},
+  {LD_MEM,"LD_MEM"},
+  {SENTINEL_OP,"SENTINEL_OP"},
+};
 Operation GetOperation(u16 inst)
 {
   u16 maskedInst = inst & OP_MASK;
   Operation op = SENTINEL_OP;
   switch(maskedInst){
     case 0:
-      case Operation::CLS:
-        op = Operation::CLS;
-        break;
-      case Operation::RET:
-        op = Operation::RET;
-        break;
-      break;
+      switch(inst){
+        case Operation::CLS:
+          op = Operation::CLS;
+          break;
+        case Operation::RET:
+          op = Operation::RET;
+          break;
+          break;
+      }
     case 0xE000:
       switch(inst & 0xE0FF){//Need to mask off X to get the opcode 
         case Operation::SKP:
@@ -384,54 +409,6 @@ Operation GetOperation(u16 inst)
   }
   return op;
 }
-std::string OperationToString(u16 inst){
-  switch(inst & OP_MASK){
-    case 0:
-      switch(inst){
-        case CLS:
-          return "CLS";
-          break;
-        case RET:
-          return "RET";
-          break;
-      }
-      break;
-    case JP:
-      return "JP";
-      break;
-    case CALL:
-      return "CALL";
-      break;
-    case SE_IMM:
-      return "SE_IMM";
-      break;
-    case SNE_IMM:
-      return "SNE_IMM";
-      break;
-    case SE_REG:
-      return "SE_REG";
-      break;
-    case SNE_REG:
-      return "SNE_REG";
-      break;
-    case LDX_IMM:
-      return "SET_REGISTER_X";
-      break;
-    case ADDX_IMM:
-      return "ADD_VALUE_TO_X";
-      break;
-    case SETI:
-      return "SET_INDEX_I";
-      break;
-    case DRAW:
-      return "DRAW";
-      break;
-    default:
-      return "";
-      break;
-  }
-}
-
 //Currently uses SDL's built-in integer scaling. Could implement it myself.
 //Also currently draws each point to the screen separately, should use a texture instead. 
 void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
@@ -468,15 +445,14 @@ void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
   SDL_RenderPresent(renderer);
 }
 int main(int argc, char* argv[]) {
-	// Initialize SDL
-    if(argc < 2){
-        std::cerr << "Need to supply CHIP8 emulator with a ROM." << std::endl;
-        return 1;
-    }
+  if(argc < 2){
+    std::cerr << "Need to supply CHIP8 emulator with a ROM." << std::endl;
+    return 1;
+  }
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
 		return 1;
-	} // Create window
+	} 
 	SDL_Window* window = SDL_CreateWindow(
 		"SDL2 Template",
 		SDL_WINDOWPOS_CENTERED,
@@ -487,11 +463,11 @@ int main(int argc, char* argv[]) {
 	);
 
 
-	if (!window) {
-		std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
-		SDL_Quit();
-		return 1;
-	}
+  if (!window) {
+    std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+    SDL_Quit();
+    return 1;
+  }
 
 	// Create renderer
 	SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -505,42 +481,28 @@ int main(int argc, char* argv[]) {
   SDL_RenderSetLogicalSize(renderer, CHIP8_DISPLAY_WIDTH, CHIP8_DISPLAY_HEIGHT);
   SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
 
-	Chip8Context ctx = {0};
-	InitChip8Context(&ctx);
-	//TODO: Load game into ram
-    auto buffer = LoadROM(argv[1]);
-    for(auto byte : buffer){
-        ctx.ram[ctx.PC++] = byte;
-    }
-    ctx.PC = 0x200;
+  Chip8Context ctx = {0};
+  InitChip8Context(&ctx);
+  auto buffer = LoadROM(argv[1]);
+  for(auto byte : buffer){
+    ctx.ram[ctx.PC++] = byte;
+  }
+  ctx.PC = 0x200;
 
 
 
 
-	bool quit = false;
-	SDL_Event e;
+  bool quit = false;
+  SDL_Event e;
 
 	
   u32 cycle = 1;
   b8 emulate = true;
-  b8 timerTick = true;
   std::unordered_map<SDL_Scancode, u8> buttonMap = {
-    {SDL_SCANCODE_0, 0x0},
-    {SDL_SCANCODE_1, 0x1},
-    {SDL_SCANCODE_2, 0x2},
-    {SDL_SCANCODE_3, 0x3},
-    {SDL_SCANCODE_4, 0x4},
-    {SDL_SCANCODE_5, 0x5},
-    {SDL_SCANCODE_6, 0x6},
-    {SDL_SCANCODE_7, 0x7},
-    {SDL_SCANCODE_8, 0x8},
-    {SDL_SCANCODE_9, 0x9},
-    {SDL_SCANCODE_A, 0xA},
-    {SDL_SCANCODE_B, 0xB},
-    {SDL_SCANCODE_C, 0xC},
-    {SDL_SCANCODE_D, 0xD},
-    {SDL_SCANCODE_E, 0xE},
-    {SDL_SCANCODE_F, 0xF},
+    {SDL_SCANCODE_1, 0x1},{SDL_SCANCODE_2, 0x2},{SDL_SCANCODE_3, 0x3},{SDL_SCANCODE_4, 0xC},
+    {SDL_SCANCODE_Q, 0x4},{SDL_SCANCODE_W, 0x5}, {SDL_SCANCODE_E, 0x6},{SDL_SCANCODE_R, 0xD},
+    {SDL_SCANCODE_A, 0x7},{SDL_SCANCODE_S, 0x8},{SDL_SCANCODE_D, 0x9},{SDL_SCANCODE_F, 0xE},
+    {SDL_SCANCODE_Z, 0xA},{SDL_SCANCODE_X, 0x0},{SDL_SCANCODE_C, 0xB},{SDL_SCANCODE_V, 0xF},
   };
   u64 counterFrequency = SDL_GetPerformanceFrequency();
   u64 lastFrame = SDL_GetPerformanceCounter();
@@ -579,6 +541,7 @@ int main(int argc, char* argv[]) {
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_QUIT)
 				quit = true;
+      //TODO: Currently it seems input is being dropped, probably because the emulation and the input logic is mismatched (someone can <down><up> a key and the emulator wouldn't recognize it because we only see press down
       if(e.type == SDL_KEYDOWN){
         if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
           std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " pressed" << std::endl;
@@ -600,96 +563,84 @@ int main(int argc, char* argv[]) {
       u8 byte2 = ctx.ram[ctx.PC++];
       u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
 
-      u8 opPrefix = (u8)MASK_OP(inst);
       u8 X = (u8)MASK_X(inst);
       u8 Y = (u8)MASK_Y(inst);
       u8 N = (u8)MASK_N(inst);
       u8 NN = (u8)MASK_NN(inst);
       u16 NNN = (u16)MASK_NNN(inst);
 
-      u16 maskedInst = inst & OP_MASK;//NOTE: This is a bad idea, you're masking in two different ways... once in MASK_OP and once like this.
-      // std::cout << "cycle " << cycle++ << " performing " << OperationToString(inst) << std::endl;
-      switch(maskedInst){
-        case 0:
-          switch(inst){
-            case Operation::CLS:
-              // Clear screen with black
-              SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-              SDL_RenderClear(renderer);
-              SDL_RenderPresent(renderer);
-              ClearDisplay(&ctx);
-              break;
-            case Operation::RET:
-              ctx.PC = ctx.stack.Pop();
-              break;
+      Operation op = GetOperation(inst);
+      assert(op != SENTINEL_OP);
+      // std::cout << "Preforming operation " << OperationToString.at(op) << std::endl;
+      switch(op){
+        case Operation::CLS:
+          // Clear screen with black
+          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+          SDL_RenderClear(renderer);
+          SDL_RenderPresent(renderer);
+          ClearDisplay(&ctx);
+          break;
+        case Operation::RET:
+          ctx.PC = ctx.stack.Pop();
+          break;
+        case Operation::SKP:
+          if(ctx.registers[X] <= 0xF && ctx.buttons[ctx.registers[X]]){
+            ctx.PC += 2;
           }
           break;
-        case 0xE000:
-          switch(inst & 0xE0FF){//Need to mask off X to get the opcode 
-            case Operation::SKP:
-              if(ctx.registers[X] <= 0xF && ctx.buttons[ctx.registers[X]]){
-                ctx.PC += 2;
-              }
-              break;
-            case Operation::SKNP:
-              if(ctx.registers[X] <= 0xF && !ctx.buttons[ctx.registers[X]]){
-                ctx.PC += 2;
-              }
-              break;
+        case Operation::SKNP:
+          if(ctx.registers[X] <= 0xF && !ctx.buttons[ctx.registers[X]]){
+            ctx.PC += 2;
           }
           break;
-        case 0xF000:
-          switch(inst & 0xF0FF){
-            case Operation::LDX_TIMER:
-              ctx.registers[X] = ctx.delayTimer;
-              break;
-            case Operation::LD_DT:
-              ctx.delayTimer = ctx.registers[X];
-              break;
-            case Operation::LD_ST:
-              ctx.soundTimer = ctx.registers[X];
-              break;
-            case Operation::ADDI_X:
-               //NOTE:  Unlike other arithmetic instructions, this did not affect VF on overflow on the original COSMAC VIP. However, it seems that some interpreters set VF to 1 if I “overflows” from 0FFF to above 1000 (outside the normal addressing range). This wasn’t the case on the original COSMAC VIP, at least, but apparently the CHIP-8 interpreter for Amiga behaved this way. At least one known game, Spacefight 2091!, relies on this behavior. I don’t know of any games that rely on this not happening, so perhaps it’s safe to do it like the Amiga interpreter did.
-              if(ctx.indexRegister + ctx.registers[X] > 0x1000){
-                ctx.VF = 1;
-              }
-              ctx.indexRegister += ctx.registers[X];
-              break;
-            case Operation::LD_KEY:
-              if(ctx.getKey && ctx.getKeyPressed <= 0xF){
-                ctx.registers[X] = ctx.getKeyPressed;
-                ctx.getKeyPressed = 0xFF; //Set back to invalid value.
-                ctx.getKey = false;
-              }
-              else{
-                ctx.getKey = true;
-                ctx.PC -= 2;
-              }
-              break;
-            case Operation::LD_FONT:
-              ctx.indexRegister = (ctx.registers[X] & 0xF)*BYTES_PER_FONT;
-              break;
-            case Operation::BCD:
-              {
-                u8 b = ctx.registers[X];
-              i8 i = 2;
-                while(i >= 0){
-                  ctx.ram[ctx.indexRegister + i--] = b%10;
-                  b /= 10;
-                }
-              }
-              break;
-            case Operation::ST_MEM:
-              for(u8 i = 0; i <= X; i++){
-                ctx.ram[ctx.indexRegister + i] = ctx.registers[i];
-              }
-              break;
-            case Operation::LD_MEM:
-              for(u8 i = 0; i <= X; i++){
-                ctx.registers[i] = ctx.ram[ctx.indexRegister + i];
-              }
-              break;
+        case Operation::LDX_TIMER:
+          ctx.registers[X] = ctx.delayTimer;
+          break;
+        case Operation::LD_DT:
+          ctx.delayTimer = ctx.registers[X];
+          break;
+        case Operation::LD_ST:
+          ctx.soundTimer = ctx.registers[X];
+          break;
+        case Operation::ADDI_X:
+          //NOTE:  Unlike other arithmetic instructions, this did not affect VF on overflow on the original COSMAC VIP. However, it seems that some interpreters set VF to 1 if I “overflows” from 0FFF to above 1000 (outside the normal addressing range). This wasn’t the case on the original COSMAC VIP, at least, but apparently the CHIP-8 interpreter for Amiga behaved this way. At least one known game, Spacefight 2091!, relies on this behavior. I don’t know of any games that rely on this not happening, so perhaps it’s safe to do it like the Amiga interpreter did.
+          if(ctx.indexRegister + ctx.registers[X] > 0x1000){
+            ctx.VF = 1;
+          }
+          ctx.indexRegister += ctx.registers[X];
+          break;
+        case Operation::LD_KEY:
+          if(ctx.getKey && ctx.getKeyPressed <= 0xF){
+            ctx.registers[X] = ctx.getKeyPressed;
+            ctx.getKeyPressed = 0xFF; //Set back to invalid value.
+            ctx.getKey = false;
+          }
+          else{
+            ctx.getKey = true;
+            ctx.PC -= 2;
+          }
+          break;
+        case Operation::LD_FONT:
+          ctx.indexRegister = (ctx.registers[X] & 0xF)*BYTES_PER_FONT;
+          break;
+        case Operation::BCD:
+          {
+            u8 b = ctx.registers[X];
+            i8 i = 2;
+            while(i >= 0){
+              ctx.ram[ctx.indexRegister + i--] = b%10;
+              b /= 10;
+            }
+          }
+          break;
+        case Operation::ST_MEM:
+          for(u8 i = 0; i <= X; i++){
+            ctx.ram[ctx.indexRegister + i] = ctx.registers[i];
+          }
+          break;
+        case Operation::LD_MEM:
+          for(u8 i = 0; i <= X; i++){
+            ctx.registers[i] = ctx.ram[ctx.indexRegister + i];
           }
           break;
         case Operation::CALL:
@@ -723,45 +674,41 @@ int main(int argc, char* argv[]) {
           DrawDisplay(renderer, ctx, X, Y, N);
           break;
         //---- 0x8000 instructions, need to mask last nibble aswell
-        case 0x8000:
-          switch(inst & 0x800f){
-            case Operation::LDX_REG:
-              ctx.registers[X] = ctx.registers[Y];
-              break;
-            case Operation::ORX_REG:
-              ctx.registers[X] |= ctx.registers[Y];
-              break;
-            case Operation::ANDX_REG:
-              ctx.registers[X] &= ctx.registers[Y];
-              break;
-            case Operation::XORX_REG:
-              ctx.registers[X] ^= ctx.registers[Y];
-              break;
-            case Operation::ADDX_REG:
-              {
-                u16 sum = (u16)ctx.registers[X] + (u16)ctx.registers[Y];
-                ctx.VF = sum > 255 ? 1 : 0;
-                ctx.registers[X] = (u8)sum;
-              }
-              break;
-            case Operation::SUB_REG:
-              ctx.VF =  ctx.registers[X] > ctx.registers[Y] ? 1 : 0;
-              ctx.registers[X] -= ctx.registers[Y];
-              break;
-            case Operation::SUBN_REG:
-              ctx.VF =  ctx.registers[X] < ctx.registers[Y] ? 1 : 0;
-              ctx.registers[X] = ctx.registers[Y] - ctx.registers[X];
-              break;
-            //NOTE shifting are ambiguous instructions, might want to have configurable behaviour, see enum defintion.
-            case Operation::SHR:
-              ctx.VF = ctx.registers[X] & 0x1 ? 1 : 0;//Check if shifted bit is 1.
-              ctx.registers[X] >>= 1;
-              break;
-            case Operation::SHL:
-              ctx.VF = ctx.registers[X] & 0x80 ? 1 : 0;//Check if shifted bit is 1.
-              ctx.registers[X] <<= 1;
-              break;
+        case Operation::LDX_REG:
+          ctx.registers[X] = ctx.registers[Y];
+          break;
+        case Operation::ORX_REG:
+          ctx.registers[X] |= ctx.registers[Y];
+          break;
+        case Operation::ANDX_REG:
+          ctx.registers[X] &= ctx.registers[Y];
+          break;
+        case Operation::XORX_REG:
+          ctx.registers[X] ^= ctx.registers[Y];
+          break;
+        case Operation::ADDX_REG:
+          {
+            u16 sum = (u16)ctx.registers[X] + (u16)ctx.registers[Y];
+            ctx.registers[X] = (u8)sum;
+            ctx.VF = sum > 255 ? 1 : 0;
           }
+          break;
+        case Operation::SUB_REG:
+          ctx.VF =  ctx.registers[X] > ctx.registers[Y] ? 1 : 0;
+          ctx.registers[X] -= ctx.registers[Y];
+          break;
+        case Operation::SUBN_REG:
+          ctx.registers[X] = ctx.registers[Y] - ctx.registers[X];
+          ctx.VF =  ctx.registers[X] < ctx.registers[Y] ? 1 : 0;
+          break;
+        //NOTE shifting are ambiguous instructions, might want to have configurable behaviour, see enum defintion.
+        case Operation::SHR:
+          ctx.VF = ctx.registers[X] & 0x1 ? 1 : 0;//Check if shifted bit is 1.
+          ctx.registers[X] >>= 1;
+          break;
+        case Operation::SHL:
+          ctx.VF = ctx.registers[X] & 0x80 ? 1 : 0;//Check if shifted bit is 1.
+          ctx.registers[X] <<= 1;
           break;
         case Operation::LDX_IMM:
           ctx.registers[X] = NN;
@@ -783,13 +730,7 @@ int main(int argc, char* argv[]) {
           break;
       }
       ctx.instructionPerformed++;
-
-
       emulate = false;
-      // if(ctx.instructionPerformed >= INST_PER_SECOND){//TODO: This doesn't work well now because it bursts through 700 instructions and then does nothing for the rest of the second. Need to pace the execution throughout the second.
-      //   ctx.instructionPerformed = 0;
-      //   emulate = false;
-      // }
     }
 	}
 
