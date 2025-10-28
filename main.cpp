@@ -51,33 +51,15 @@ const u8 CHIP8_DISPLAY_HEIGHT = 32;
 const int SCREEN_WIDTH = 8*CHIP8_DISPLAY_WIDTH;
 const int SCREEN_HEIGHT = 8*CHIP8_DISPLAY_HEIGHT;
 
-/*
-	* Font to be used
-	* 0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-	* 0x20, 0x60, 0x20, 0x20, 0x70, // 1
-	* 0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-	* 0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-	* 0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-	* 0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-	* 0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-	* 0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-	* 0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-	* 0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-	* 0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-	* 0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-	* 0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-	* 0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-	* 0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-	* 0xF0, 0x80, 0xF0, 0x80, 0x80  // F
-*/
 #define MEM_ALLOC_ERR() std::cerr << "Could not allocate memory! Quitting..."; exit(1);
+//
 //NOTE 1KB? maybe we'll need more? who knows.
 #define STACK_SIZE 1024 
 struct Stack{
   u16 memory[STACK_SIZE];
   u32 counter = 0;
   void Push(u16 address){
-    assert(address < STACK_SIZE);
+    assert(counter < STACK_SIZE);
     memory[counter++] = address;
   }
   u16 Pop(){
@@ -172,12 +154,9 @@ void InitChip8Context(Chip8Context* ctx){
 	if(!ctx->ram) {
 		MEM_ALLOC_ERR();
 	}
+  //Copy Font
   for(u32 i = 0; i < sizeof(FONT)/sizeof(FONT[0]); i++)
     ctx->ram[i] = FONT[i];
-	// ctx->stack = (i16*)malloc(STACK_SIZE);
-	// if(!ctx->stack) {
-	// 	MEM_ALLOC_ERR();
-	// }
 	ctx->PC = 0x200;
 }
 
@@ -261,6 +240,7 @@ enum Operation {
 */
   ST_MEM = 0xF055,
   LD_MEM = 0xF065,
+  SENTINEL_OP = 0xFFFF,
 };
 
 // std::unordered_map<Operation, std::string> OperationToString = {
@@ -277,6 +257,133 @@ enum Operation {
 //   {Operation::SET_INDEX_I , "SET_INDEX_I"},
 //   {Operation::DRAW , "DRAW"}
 // };
+Operation GetOperation(u16 inst)
+{
+  u16 maskedInst = inst & OP_MASK;
+  Operation op = SENTINEL_OP;
+  switch(maskedInst){
+    case 0:
+      case Operation::CLS:
+        op = Operation::CLS;
+        break;
+      case Operation::RET:
+        op = Operation::RET;
+        break;
+      break;
+    case 0xE000:
+      switch(inst & 0xE0FF){//Need to mask off X to get the opcode 
+        case Operation::SKP:
+          op = Operation::SKP;
+          break;
+        case Operation::SKNP:
+          op = Operation::SKNP;
+          break;
+      }
+      break;
+    case 0xF000:
+      switch(inst & 0xF0FF){
+        case Operation::LDX_TIMER:
+          op = Operation::LDX_TIMER;
+          break;
+        case Operation::LD_DT:
+          op = Operation::LD_DT;
+          break;
+        case Operation::LD_ST:
+          op = Operation::LD_ST;
+          break;
+        case Operation::ADDI_X:
+          op = Operation::ADDI_X;
+          break;
+        case Operation::LD_KEY:
+          op = Operation::LD_KEY;
+          break;
+        case Operation::LD_FONT:
+          op = Operation::LD_FONT;
+          break;
+        case Operation::BCD:
+          op = Operation::BCD;
+          break;
+        case Operation::ST_MEM:
+          op = Operation::ST_MEM;
+          break;
+        case Operation::LD_MEM:
+          op = Operation::LD_MEM;
+          break;
+      }
+      break;
+    case 0x8000:
+      switch(inst & 0x800f){
+        case Operation::LDX_REG:
+          op = Operation::LDX_REG;
+          break;
+        case Operation::ORX_REG:
+          op = Operation::ORX_REG;
+          break;
+        case Operation::ANDX_REG:
+          op = Operation::ANDX_REG;
+          break;
+        case Operation::XORX_REG:
+          op = Operation::XORX_REG;
+          break;
+        case Operation::ADDX_REG:
+          op = Operation::ADDX_REG;
+          break;
+        case Operation::SUB_REG:
+          op = Operation::SUB_REG;
+          break;
+        case Operation::SUBN_REG:
+          op = Operation::SUBN_REG;
+          break;
+        case Operation::SHR:
+          op = Operation::SHR;
+          break;
+        case Operation::SHL:
+          op = Operation::SHL;
+          break;
+      }
+      break;
+    case Operation::CALL:
+      op = Operation::CALL;
+      break;
+    case Operation::SE_IMM:
+      op = Operation::SE_IMM;
+      break;
+    case Operation::SNE_IMM:
+      op = Operation::SNE_IMM;
+      break;
+    case Operation::SE_REG:
+      op = Operation::SE_REG;
+      break;
+    case Operation::SNE_REG:
+      op = Operation::SNE_REG;
+      break;
+    case Operation::JP:
+      op = Operation::JP;
+      break;
+    case Operation::DRAW:
+      op = Operation::DRAW;
+      break;
+    case Operation::LDX_IMM:
+      op = Operation::LDX_IMM;
+      break;
+    case Operation::ADDX_IMM:
+      op = Operation::ADDX_IMM;
+      break;
+    case Operation::SETI:
+      op = Operation::SETI;
+      break;
+    case Operation::RND:
+      op = Operation::RND;
+      break;
+    default:
+      std::cout << "Could not preform instruction " << std::hex << inst << std::endl; 
+      break;
+  }
+  if(op == Operation::SENTINEL_OP){
+    std::cout << "Instruction not implemented: " << std::hex << inst << std::endl;
+  }
+  return op;
+}
 std::string OperationToString(u16 inst){
   switch(inst & OP_MASK){
     case 0:
@@ -329,7 +436,7 @@ std::string OperationToString(u16 inst){
 //Also currently draws each point to the screen separately, should use a texture instead. 
 void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
 {
-  std::cout << "Draw display function" << std::endl;
+  // std::cout << "Draw display function" << std::endl;
   u8 x = ctx.registers[X] % CHIP8_DISPLAY_WIDTH;
   u8 y = ctx.registers[Y] % CHIP8_DISPLAY_HEIGHT;
   u8 countBytes = N;
@@ -533,16 +640,16 @@ int main(int argc, char* argv[]) {
           break;
         case 0xF000:
           switch(inst & 0xF0FF){
-            case LDX_TIMER:
+            case Operation::LDX_TIMER:
               ctx.registers[X] = ctx.delayTimer;
               break;
-            case LD_DT:
+            case Operation::LD_DT:
               ctx.delayTimer = ctx.registers[X];
               break;
-            case LD_ST:
+            case Operation::LD_ST:
               ctx.soundTimer = ctx.registers[X];
               break;
-            case ADDI_X:
+            case Operation::ADDI_X:
                //NOTE:  Unlike other arithmetic instructions, this did not affect VF on overflow on the original COSMAC VIP. However, it seems that some interpreters set VF to 1 if I “overflows” from 0FFF to above 1000 (outside the normal addressing range). This wasn’t the case on the original COSMAC VIP, at least, but apparently the CHIP-8 interpreter for Amiga behaved this way. At least one known game, Spacefight 2091!, relies on this behavior. I don’t know of any games that rely on this not happening, so perhaps it’s safe to do it like the Amiga interpreter did.
               if(ctx.indexRegister + ctx.registers[X] > 0x1000){
                 ctx.VF = 1;
