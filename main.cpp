@@ -694,8 +694,12 @@ int main(int argc, char* argv[]) {
           }
           break;
         case Operation::SUB_REG:
-          ctx.VF =  ctx.registers[X] > ctx.registers[Y] ? 1 : 0;
-          ctx.registers[X] -= ctx.registers[Y];
+          {
+            const u8 notBorrow = ctx.registers[X] >= ctx.registers[Y] ? 1 : 0;//NOTE: For some reason >= fixes rom number 4 even though the spec says it should set VF only on x > y...
+            const u8 diff = ctx.registers[X] - ctx.registers[Y];
+            ctx.registers[X] = diff;
+            ctx.VF = notBorrow;
+          }
           break;
         case Operation::SUBN_REG:
           ctx.registers[X] = ctx.registers[Y] - ctx.registers[X];
@@ -703,11 +707,11 @@ int main(int argc, char* argv[]) {
           break;
         //NOTE shifting are ambiguous instructions, might want to have configurable behaviour, see enum defintion.
         case Operation::SHR:
-          ctx.VF = ctx.registers[X] & 0x1 ? 1 : 0;//Check if shifted bit is 1.
+          ctx.VF = (ctx.registers[X] & 0x1) ? 1 : 0;//Check if shifted bit is 1.
           ctx.registers[X] >>= 1;
           break;
         case Operation::SHL:
-          ctx.VF = ctx.registers[X] & 0x80 ? 1 : 0;//Check if shifted bit is 1.
+          ctx.VF = (ctx.registers[X] & 0x80) ? 1 : 0;//Check if shifted bit is 1.
           ctx.registers[X] <<= 1;
           break;
         case Operation::LDX_IMM:
