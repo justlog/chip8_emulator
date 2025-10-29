@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <vector>
+#include <math.h>
 #include <assert.h>
 
 
@@ -444,6 +445,40 @@ void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
   }
   SDL_RenderPresent(renderer);
 }
+
+
+#define SAMPLE_RATE 48000
+
+typedef struct {
+    double phase;
+    double freq;
+    double volume;
+} AudioData;
+void audio_callback(void* userdata, Uint8* stream, int len) {
+    AudioData* data = (AudioData*)userdata;
+    float* buffer = (float*)stream;
+    int samples = len / sizeof(float);
+
+    double phase = data->phase;
+    double freq = data->freq;
+    double volume = data->volume;
+    double phase_increment = 2.0 * M_PI * freq / SAMPLE_RATE;
+
+    for (int i = 0; i < samples; i++) {
+        // Square wave "buzz" tone
+        float value = (sin(phase) > 0 ? 1.0f : -1.0f) * volume;
+        buffer[i] = value;
+        phase += phase_increment;
+        if (phase >= 2.0 * M_PI)
+            phase -= 2.0 * M_PI;
+    }
+
+    data->phase = phase;
+}
+
+
+
+
 int main(int argc, char* argv[]) {
   if(argc < 2){
     std::cerr << "Need to supply CHIP8 emulator with a ROM." << std::endl;
@@ -480,6 +515,28 @@ int main(int argc, char* argv[]) {
   //NOTE: Using SDL built-in integer scaling. If I want to, I could try to implement this myself.
   SDL_RenderSetLogicalSize(renderer, CHIP8_DISPLAY_WIDTH, CHIP8_DISPLAY_HEIGHT);
   SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
+
+	//Audio
+	AudioData data = {0, 22.0, 0.2}; 
+	SDL_AudioSpec want, have;
+	SDL_zero(want);
+	want.freq = SAMPLE_RATE;
+  want.format = AUDIO_F32SYS;
+  want.channels = 1;
+  want.samples = 512;
+  want.callback = audio_callback;
+  want.userdata = &data;
+  if(SDL_OpenAudio(&want, &have) < 0){
+    std::cerr << "Failed to open audio " << SDL_GetError() << std::endl;
+    SDL_Quit();
+    return 1;
+  }
+
+
+
+
+
+
 
   Chip8Context ctx = {0};
   InitChip8Context(&ctx);
@@ -526,6 +583,9 @@ int main(int argc, char* argv[]) {
       }
       if(ctx.soundTimer > 0){
         ctx.soundTimer -= 1;
+        if(ctx.soundTimer == 0){
+          SDL_PauseAudio(1);
+        }
       }
       lastTimerTick -= msPerTimerTick;
     }
@@ -546,14 +606,14 @@ int main(int argc, char* argv[]) {
         if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
           std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " pressed" << std::endl;
           ctx.buttons[it->second] = true;
-          if(ctx.getKey){
-            ctx.getKeyPressed = it->second;//On the original COSMAC VIP, the key was only registered when it was pressed and then released.
-          }
         }
       }
 			if (e.type == SDL_KEYUP){//TODO Controls
         if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
           std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " released" << std::endl;
+          if(ctx.getKey){//TODO: Not sure that this is the right logic, might need to keep state for all the buttons (states for both pressed and released).
+            ctx.getKeyPressed = it->second;//On the original COSMAC VIP, the key was only registered when it was pressed and then released.
+          }
           ctx.buttons[it->second] = false;
         }
 			}
@@ -601,12 +661,18 @@ int main(int argc, char* argv[]) {
           break;
         case Operation::LD_ST:
           ctx.soundTimer = ctx.registers[X];
+          SDL_PauseAudio(0);
           break;
         case Operation::ADDI_X:
           //NOTE:  Unlike other arithmetic instructions, this did not affect VF on overflow on the original COSMAC VIP. However, it seems that some interpreters set VF to 1 if I “overflows” from 0FFF to above 1000 (outside the normal addressing range). This wasn’t the case on the original COSMAC VIP, at least, but apparently the CHIP-8 interpreter for Amiga behaved this way. At least one known game, Spacefight 2091!, relies on this behavior. I don’t know of any games that rely on this not happening, so perhaps it’s safe to do it like the Amiga interpreter did.
-          if(ctx.indexRegister + ctx.registers[X] > 0x1000){
-            ctx.VF = 1;
-          }
+          /* NOTE: From Emulator Development discord regarding setting VF: We still have not come accross an emulator that shows that behavior and is from that time period of the only game that seems to profit from it,
+           * and actually that game (Spacefight 2091) is just broken and would not be fixed by that "quirk", it would just fix a part of the issues, and a really fixed version was made instead.
+           * So I see that "quirk" as a myth and it can actually break games and fixes none. All emulators implementing that behavior are from much later and just repeat the myth without knowing why.
+           * Programs for any known variant do not expect their VF to be destroyed by Fx1E, so it is a bad idea.
+          */
+          // if(ctx.indexRegister + ctx.registers[X] > 0x1000){
+          //   ctx.VF = 1;
+          // }
           ctx.indexRegister += ctx.registers[X];
           break;
         case Operation::LD_KEY:
