@@ -4,7 +4,6 @@
   #include <SDL2/SDL.h>
 #endif
 
-//testing
 #include <iostream>
 #include <unordered_map>
 #include <cstdint>
