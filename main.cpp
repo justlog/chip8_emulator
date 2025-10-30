@@ -774,22 +774,18 @@ int main(int argc, char* argv[]) {
         //NOTE shifting are ambiguous instructions, might want to have configurable behaviour, see enum defintion.
         case Operation::SHR:
           {
-          u8 borrow = (ctx.registers[X] & 0x1) ? 1 : 0;
-          u8 result = ctx.registers[X] >> 1;
-          ctx.registers[X] = result;
-          ctx.VF = borrow;
+            u8 borrow = (ctx.registers[X] & 0x1) ? 1 : 0;
+            u8 result = ctx.registers[X] >> 1;
+            ctx.registers[X] = result;
+            ctx.VF = borrow;
           }
-          // ctx.VF = (ctx.registers[X] & 0x1) ? 1 : 0;//Check if shifted bit is 1.
-          // ctx.registers[X] >>= 1;
           break;
         case Operation::SHL:
           {
-          u8 borrow = (ctx.registers[X] & 0x80) ? 1 : 0;
-          u8 result = ctx.registers[X] << 1;
-          ctx.registers[X] = result;
-          ctx.VF = borrow;
-          // ctx.VF = (ctx.registers[X] & 0x80) ? 1 : 0;//Check if shifted bit is 1.
-          // ctx.registers[X] <<= 1;
+            u8 borrow = (ctx.registers[X] & 0x80) ? 1 : 0;
+            u8 result = ctx.registers[X] << 1;
+            ctx.registers[X] = result;
+            ctx.VF = borrow;
           }
           break;
         case Operation::LDX_IMM:
