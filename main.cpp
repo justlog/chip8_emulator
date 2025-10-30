@@ -38,6 +38,7 @@ std::vector<char> LoadROM(const char* path){
 
     std::vector<char> buffer(fileSize);
     if(inputFile.read(buffer.data(), fileSize)){
+        inputFile.close();
         return buffer;
     }
     else{
@@ -149,15 +150,19 @@ void ClearDisplay(Chip8Context* ctx){
     for(u32 j = 0; j < CHIP8_DISPLAY_WIDTH; j++)
       ctx->display[i][j] = false;
 }
+// #define RAM_SIZE 4096
+#define KB(n) (n)*1024
+#define RAM_SIZE KB(4)
 void InitChip8Context(Chip8Context* ctx){
 	//Allocate memory for ram
-	ctx->ram = (i8*)malloc(4096);
+	ctx->ram = (i8*)malloc(RAM_SIZE);
 	if(!ctx->ram) {
 		MEM_ALLOC_ERR();
 	}
   //Copy Font
-  for(u32 i = 0; i < sizeof(FONT)/sizeof(FONT[0]); i++)
+  for(u32 i = 0; i < sizeof(FONT)/sizeof(FONT[0]); i++){
     ctx->ram[i] = FONT[i];
+  }
 	ctx->PC = 0x200;
 }
 
@@ -294,8 +299,8 @@ Operation GetOperation(u16 inst)
         case Operation::RET:
           op = Operation::RET;
           break;
-          break;
       }
+      break;
     case 0xE000:
       switch(inst & 0xE0FF){//Need to mask off X to get the opcode 
         case Operation::SKP:
@@ -401,6 +406,9 @@ Operation GetOperation(u16 inst)
     case Operation::RND:
       op = Operation::RND;
       break;
+    case Operation::JPOFFSET:
+      op = Operation::JPOFFSET;
+      break;
     default:
       std::cout << "Could not preform instruction " << std::hex << inst << std::endl; 
       break;
@@ -414,7 +422,6 @@ Operation GetOperation(u16 inst)
 //Also currently draws each point to the screen separately, should use a texture instead. 
 void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
 {
-  // std::cout << "Draw display function" << std::endl;
   u8 x = ctx.registers[X] % CHIP8_DISPLAY_WIDTH;
   u8 y = ctx.registers[Y] % CHIP8_DISPLAY_HEIGHT;
   u8 countBytes = N;
@@ -541,7 +548,7 @@ int main(int argc, char* argv[]) {
   Chip8Context ctx = {0};
   InitChip8Context(&ctx);
   auto buffer = LoadROM(argv[1]);
-  for(auto byte : buffer){
+  for(unsigned char byte : buffer){
     ctx.ram[ctx.PC++] = byte;
   }
   ctx.PC = 0x200;
@@ -743,14 +750,18 @@ int main(int argc, char* argv[]) {
         case Operation::LDX_REG:
           ctx.registers[X] = ctx.registers[Y];
           break;
+        //NOTE: the and, or and xor instructions set VF to 0.
         case Operation::ORX_REG:
           ctx.registers[X] |= ctx.registers[Y];
+          ctx.VF = 0;
           break;
         case Operation::ANDX_REG:
           ctx.registers[X] &= ctx.registers[Y];
+          ctx.VF = 0;
           break;
         case Operation::XORX_REG:
           ctx.registers[X] ^= ctx.registers[Y];
+          ctx.VF = 0;
           break;
         case Operation::ADDX_REG:
           {
@@ -796,6 +807,9 @@ int main(int argc, char* argv[]) {
           break;
         case Operation::SETI:
           ctx.indexRegister = NNN;
+          break;
+        case Operation::JPOFFSET:
+          ctx.PC = NNN + ctx.V0;
           break;
         case Operation::RND:
           {
