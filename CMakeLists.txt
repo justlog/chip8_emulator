@@ -11,12 +11,21 @@ add_executable(chip8
   main.cpp
   # add other .cpp files here explicitly
 )
+find_package(SDL2 REQUIRED)
 
 # ---- Include directories ----
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 target_include_directories(chip8 PRIVATE
-  "${CMAKE_SOURCE_DIR}/include"
-  "C:/libs/SDL2/include"
+      "${CMAKE_SOURCE_DIR}/include"
+      "C:/libs/SDL2/include"
 )
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+target_include_directories(chip8 PRIVATE
+      "${CMAKE_SOURCE_DIR}/include"
+      "/usr/include/SDL2"
+)
+endif()
+
 
 # ---- Compiler options ----
 if(MSVC)
@@ -28,17 +37,25 @@ else()
 endif()
 
 # ---- Link SDL2 ----
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 target_link_libraries(chip8 PRIVATE
-  "C:/libs/SDL2/lib/x64/SDL2main.lib"
-  "C:/libs/SDL2/lib/x64/SDL2.lib"
+      "C:/libs/SDL2/lib/x64/SDL2main.lib"
+      "C:/libs/SDL2/lib/x64/SDL2.lib"
 )
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+target_link_libraries(chip8 PRIVATE
+      SDL2::SDL2
+)
+endif()
 
 # Copy SDL2.dll so the EXE runs from build folder
-add_custom_command(TARGET chip8 POST_BUILD
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    add_custom_command(TARGET chip8 POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "C:/libs/SDL2/lib/x64/SDL2.dll"
     "$<TARGET_FILE_DIR:chip8>/SDL2.dll"
-)
+    )
+endif()
 
 # ---- Export compile_commands.json for clangd ----
 add_custom_target(copy-compile-commands ALL
