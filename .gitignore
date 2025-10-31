@@ -56,6 +56,6 @@ copy-compile-commands.*
 .DS_Store
 Thumbs.db
 
-# Optional: emulator ROMs or test binaries
-*.ch8
+# # Optional: emulator ROMs or test binaries
+# *.ch8
 
