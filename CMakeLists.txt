@@ -11,7 +11,7 @@ add_executable(chip8
   main.cpp
   # add other .cpp files here explicitly
 )
-find_package(SDL2 REQUIRED)
+# find_package(SDL2 REQUIRED)
 
 # ---- Include directories ----
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
