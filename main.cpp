@@ -578,9 +578,11 @@ int main(int argc, char* argv[]) {
   constexpr u32 FRAME_RATE = 60;//60Hz refresh rate
   constexpr f64 msPerTimerTick = (1.0/FRAME_RATE) * 1000.0;
   constexpr u32 TICK_RATE = 11;//NOTE: games and different implemenations might have a different tick rate. Tick rate results in TICK_RATE * FRAME_RATE for instructions per second. https://github.com/chip-8/chip-8-database 
+  u64 instructionsPerFrame = 0;
 	// Main loop
 	while (!quit) {
     //Timer ticks
+
     u64 currentFrame = SDL_GetPerformanceCounter();
     f64 dt = ((currentFrame - lastFrame) / (f64)counterFrequency) * 1000;//in ms
     lastTimerTick += dt;
@@ -600,6 +602,7 @@ int main(int argc, char* argv[]) {
     }
 
     if(emulate){
+      u64 emulationStart = SDL_GetPerformanceCounter();
       // Handle events
       while (SDL_PollEvent(&e) != 0) {
         if (e.type == SDL_QUIT)
@@ -634,8 +637,8 @@ int main(int argc, char* argv[]) {
 
         Operation op = GetOperation(inst);
         assert(op != SENTINEL_OP);
-        std::cout << "Preforming operation #" << cycle++ << ":"<< OperationToString.at(op) << std::endl;
-        std::cout << "X: " << +X << " Y: " << +Y << " N: " << +N << " NN: " << +NN << " NNN: " << +NNN << std::endl;
+        // std::cout << "Preforming operation #" << cycle++ << ":"<< OperationToString.at(op) << std::endl;
+        // std::cout << "X: " << +X << " Y: " << +Y << " N: " << +N << " NN: " << +NN << " NNN: " << +NNN << std::endl;
         switch(op){
           case Operation::CLS:
             // Clear screen with black
@@ -819,7 +822,11 @@ int main(int argc, char* argv[]) {
             break;
         }
         ctx.instructionsPerformed++;
+        instructionsPerFrame++;
       }
+      u64 emulationFinish = SDL_GetPerformanceCounter();
+      std::cout << "Total emulation time (in ms): " << ((emulationFinish-emulationStart) / (f64)counterFrequency) * 1000 << std::endl;
+    // f64 dt = ((currentFrame - lastFrame) / (f64)counterFrequency) * 1000;//in ms
       emulate = false;
       ctx.instructionsPerformed = 0;
     }
