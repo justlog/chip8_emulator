@@ -121,7 +121,7 @@ struct Chip8Context {
 		};
 		b8 buttons[16];
 	};
-  u32 instructionPerformed = 0;
+  u32 instructionsPerformed = 0;
   b8 getKey = false;
   u8 getKeyPressed = 0xFF;
 };
@@ -571,21 +571,15 @@ int main(int argc, char* argv[]) {
   u64 counterFrequency = SDL_GetPerformanceFrequency();
   u64 lastFrame = SDL_GetPerformanceCounter();
   f64 lastTimerTick = 0.0;
-  constexpr u32 FRAME_RATE = 60;
+  constexpr u32 FRAME_RATE = 60;//60Hz refresh rate
   constexpr f64 msPerTimerTick = (1.0/FRAME_RATE) * 1000.0;
-  constexpr u32 TICK_RATE = 1000;//NOTE: games and different implemenations might have a different tick rate. Tick rate results in TICK_RATE * FRAME_RATE for instructions per second. https://github.com/chip-8/chip-8-database 
-  constexpr u64 INSTRUCTIONS_PER_SECOND = FRAME_RATE * TICK_RATE;
-  f64 emulationTimer = 0.0;
-  f64 msPerInst = (1.0/(INSTRUCTIONS_PER_SECOND)) * 1000;
-  std::cout << "msPerInst: " << msPerInst << std::endl;
+  constexpr u32 TICK_RATE = 11;//NOTE: games and different implemenations might have a different tick rate. Tick rate results in TICK_RATE * FRAME_RATE for instructions per second. https://github.com/chip-8/chip-8-database 
 	// Main loop
 	while (!quit) {
     //Timer ticks
-    //TODO: currently busy waiting, switch to non-busy?
     u64 currentFrame = SDL_GetPerformanceCounter();
     f64 dt = ((currentFrame - lastFrame) / (f64)counterFrequency) * 1000;//in ms
     lastTimerTick += dt;
-    emulationTimer += dt;
     lastFrame = currentFrame;
     if(lastTimerTick >= msPerTimerTick){
       if(ctx.delayTimer > 0){
@@ -598,234 +592,231 @@ int main(int argc, char* argv[]) {
         }
       }
       lastTimerTick -= msPerTimerTick;
-    }
-    if(emulationTimer >= msPerInst){
-      if(emulate){
-        std::cout << "EMULATION TOO SLOW, ONLY " << ctx.instructionPerformed << " WERE PREFORMED" << std::endl;
-      }
-      emulationTimer -= msPerInst;
       emulate = true;
     }
 
-		// Handle events
-		while (SDL_PollEvent(&e) != 0) {
-			if (e.type == SDL_QUIT)
-				quit = true;
-      //TODO: Currently it seems input is being dropped, probably because the emulation and the input logic is mismatched (someone can <down><up> a key and the emulator wouldn't recognize it because we only see press down
-      if(e.type == SDL_KEYDOWN){
-        if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
-          std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " pressed" << std::endl;
-          ctx.buttons[it->second] = true;
+    if(emulate){
+      // Handle events
+      while (SDL_PollEvent(&e) != 0) {
+        if (e.type == SDL_QUIT)
+          quit = true;
+        //TODO: Currently it seems input is being dropped, probably because the emulation and the input logic is mismatched (someone can <down><up> a key and the emulator wouldn't recognize it because we only see press down
+        if(e.type == SDL_KEYDOWN){
+          if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
+            std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " pressed" << std::endl;
+            ctx.buttons[it->second] = true;
+          }
+        }
+        if (e.type == SDL_KEYUP){//TODO Controls
+          if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
+            std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " released" << std::endl;
+            if(ctx.getKey){//TODO: Not sure that this is the right logic, might need to keep state for all the buttons (states for both pressed and released).
+              ctx.getKeyPressed = it->second;//On the original COSMAC VIP, the key was only registered when it was pressed and then released.
+            }
+            ctx.buttons[it->second] = false;
+          }
         }
       }
-			if (e.type == SDL_KEYUP){//TODO Controls
-        if(auto it = buttonMap.find(e.key.keysym.scancode); it != buttonMap.end()){
-          std::cout << "chip8 key " << SDL_GetKeyName(SDL_GetKeyFromScancode(e.key.keysym.scancode)) << " released" << std::endl;
-          if(ctx.getKey){//TODO: Not sure that this is the right logic, might need to keep state for all the buttons (states for both pressed and released).
-            ctx.getKeyPressed = it->second;//On the original COSMAC VIP, the key was only registered when it was pressed and then released.
-          }
-          ctx.buttons[it->second] = false;
-        }
-			}
-		}
-    if(emulate){
-      u8 byte1 = ctx.ram[ctx.PC++];
-      u8 byte2 = ctx.ram[ctx.PC++];
-      u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
+      while(ctx.instructionsPerformed < TICK_RATE){
+        u8 byte1 = ctx.ram[ctx.PC++];
+        u8 byte2 = ctx.ram[ctx.PC++];
+        u16 inst = (((u16)byte1) << 8) | ((u16)byte2);
 
-      u8 X = (u8)MASK_X(inst);
-      u8 Y = (u8)MASK_Y(inst);
-      u8 N = (u8)MASK_N(inst);
-      u8 NN = (u8)MASK_NN(inst);
-      u16 NNN = (u16)MASK_NNN(inst);
+        u8 X = (u8)MASK_X(inst);
+        u8 Y = (u8)MASK_Y(inst);
+        u8 N = (u8)MASK_N(inst);
+        u8 NN = (u8)MASK_NN(inst);
+        u16 NNN = (u16)MASK_NNN(inst);
 
-      Operation op = GetOperation(inst);
-      assert(op != SENTINEL_OP);
-      // std::cout << "Preforming operation " << OperationToString.at(op) << std::endl;
-      switch(op){
-        case Operation::CLS:
-          // Clear screen with black
-          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-          SDL_RenderClear(renderer);
-          SDL_RenderPresent(renderer);
-          ClearDisplay(&ctx);
-          break;
-        case Operation::RET:
-          ctx.PC = ctx.stack.Pop();
-          break;
-        case Operation::SKP:
-          if(ctx.registers[X] <= 0xF && ctx.buttons[ctx.registers[X]]){
-            ctx.PC += 2;
-          }
-          break;
-        case Operation::SKNP:
-          if(ctx.registers[X] <= 0xF && !ctx.buttons[ctx.registers[X]]){
-            ctx.PC += 2;
-          }
-          break;
-        case Operation::LDX_TIMER:
-          ctx.registers[X] = ctx.delayTimer;
-          break;
-        case Operation::LD_DT:
-          ctx.delayTimer = ctx.registers[X];
-          break;
-        case Operation::LD_ST:
-          ctx.soundTimer = ctx.registers[X];
-          SDL_PauseAudio(0);
-          break;
-        case Operation::ADDI_X:
-          //NOTE:  Unlike other arithmetic instructions, this did not affect VF on overflow on the original COSMAC VIP. However, it seems that some interpreters set VF to 1 if I “overflows” from 0FFF to above 1000 (outside the normal addressing range). This wasn’t the case on the original COSMAC VIP, at least, but apparently the CHIP-8 interpreter for Amiga behaved this way. At least one known game, Spacefight 2091!, relies on this behavior. I don’t know of any games that rely on this not happening, so perhaps it’s safe to do it like the Amiga interpreter did.
-          /* NOTE: From Emulator Development discord regarding setting VF: We still have not come accross an emulator that shows that behavior and is from that time period of the only game that seems to profit from it,
+        Operation op = GetOperation(inst);
+        assert(op != SENTINEL_OP);
+        std::cout << "Preforming operation #" << cycle++ << ":"<< OperationToString.at(op) << std::endl;
+        switch(op){
+          case Operation::CLS:
+            // Clear screen with black
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderClear(renderer);
+            SDL_RenderPresent(renderer);
+            ClearDisplay(&ctx);
+            break;
+          case Operation::RET:
+            ctx.PC = ctx.stack.Pop();
+            break;
+          case Operation::SKP:
+            if(ctx.registers[X] <= 0xF && ctx.buttons[ctx.registers[X]]){
+              ctx.PC += 2;
+            }
+            break;
+          case Operation::SKNP:
+            if(ctx.registers[X] <= 0xF && !ctx.buttons[ctx.registers[X]]){
+              ctx.PC += 2;
+            }
+            break;
+          case Operation::LDX_TIMER:
+            ctx.registers[X] = ctx.delayTimer;
+            break;
+          case Operation::LD_DT:
+            ctx.delayTimer = ctx.registers[X];
+            break;
+          case Operation::LD_ST:
+            ctx.soundTimer = ctx.registers[X];
+            SDL_PauseAudio(0);
+            break;
+          case Operation::ADDI_X:
+            //NOTE:  Unlike other arithmetic instructions, this did not affect VF on overflow on the original COSMAC VIP. However, it seems that some interpreters set VF to 1 if I “overflows” from 0FFF to above 1000 (outside the normal addressing range). This wasn’t the case on the original COSMAC VIP, at least, but apparently the CHIP-8 interpreter for Amiga behaved this way. At least one known game, Spacefight 2091!, relies on this behavior. I don’t know of any games that rely on this not happening, so perhaps it’s safe to do it like the Amiga interpreter did.
+            /* NOTE: From Emulator Development discord regarding setting VF: We still have not come accross an emulator that shows that behavior and is from that time period of the only game that seems to profit from it,
            * and actually that game (Spacefight 2091) is just broken and would not be fixed by that "quirk", it would just fix a part of the issues, and a really fixed version was made instead.
            * So I see that "quirk" as a myth and it can actually break games and fixes none. All emulators implementing that behavior are from much later and just repeat the myth without knowing why.
            * Programs for any known variant do not expect their VF to be destroyed by Fx1E, so it is a bad idea.
           */
-          // if(ctx.indexRegister + ctx.registers[X] > 0x1000){
-          //   ctx.VF = 1;
-          // }
-          ctx.indexRegister += ctx.registers[X];
-          break;
-        case Operation::LD_KEY:
-          if(ctx.getKey && ctx.getKeyPressed <= 0xF){
-            ctx.registers[X] = ctx.getKeyPressed;
-            ctx.getKeyPressed = 0xFF; //Set back to invalid value.
-            ctx.getKey = false;
-          }
-          else{
-            ctx.getKey = true;
-            ctx.PC -= 2;
-          }
-          break;
-        case Operation::LD_FONT:
-          ctx.indexRegister = (ctx.registers[X] & 0xF)*BYTES_PER_FONT;
-          break;
-        case Operation::BCD:
-          {
-            u8 b = ctx.registers[X];
-            i8 i = 2;
-            while(i >= 0){
-              ctx.ram[ctx.indexRegister + i--] = b%10;
-              b /= 10;
-            }
-          }
-          break;
-        case Operation::ST_MEM:
-          for(u8 i = 0; i <= X; i++){
-            ctx.ram[ctx.indexRegister + i] = ctx.registers[i];
-          }
-          break;
-        case Operation::LD_MEM:
-          for(u8 i = 0; i <= X; i++){
-            ctx.registers[i] = ctx.ram[ctx.indexRegister + i];
-          }
-          break;
-        case Operation::CALL:
-          ctx.stack.Push(ctx.PC);
-          ctx.PC = NNN;
-          break;
-        case Operation::SE_IMM:
-          if(ctx.registers[X] == NN){
-            ctx.PC += 2;
-          }
-          break;
-        case Operation::SNE_IMM:
-          if(ctx.registers[X] != NN){
-            ctx.PC += 2;
-          }
-          break;
-        case Operation::SE_REG:
-          if(ctx.registers[X] == ctx.registers[Y]){
-            ctx.PC += 2;
-          }
-          break;
-        case Operation::SNE_REG:
-          if(ctx.registers[X] != ctx.registers[Y]){
-            ctx.PC += 2;
-          }
-          break;
-        case Operation::JP:
-          ctx.PC = NNN;
-          break;
-        case Operation::DRAW:
-          DrawDisplay(renderer, ctx, X, Y, N);
-          break;
-        //---- 0x8000 instructions, need to mask last nibble aswell
-        case Operation::LDX_REG:
-          ctx.registers[X] = ctx.registers[Y];
-          break;
-        //NOTE: the and, or and xor instructions set VF to 0.
-        case Operation::ORX_REG:
-          ctx.registers[X] |= ctx.registers[Y];
-          // ctx.VF = 0;
-          break;
-        case Operation::ANDX_REG:
-          ctx.registers[X] &= ctx.registers[Y];
-          // ctx.VF = 0;
-          break;
-        case Operation::XORX_REG:
-          ctx.registers[X] ^= ctx.registers[Y];
-          // ctx.VF = 0;
-          break;
-        case Operation::ADDX_REG:
-          {
-            u16 sum = (u16)ctx.registers[X] + (u16)ctx.registers[Y];
-            ctx.registers[X] = (u8)sum;
-            ctx.VF = sum > 255 ? 1 : 0;
-          }
-          break;
-        case Operation::SUB_REG:
-          {
-            const u8 notBorrow = ctx.registers[X] >= ctx.registers[Y] ? 1 : 0;//NOTE: For some reason >= fixes rom number 4 even though the spec says it should set VF only on x > y...
-            const u8 diff = ctx.registers[X] - ctx.registers[Y];
-            ctx.registers[X] = diff;
-            ctx.VF = notBorrow;
-          }
-          break;
-        case Operation::SUBN_REG:
-          ctx.registers[X] = ctx.registers[Y] - ctx.registers[X];
-          ctx.VF =  ctx.registers[X] < ctx.registers[Y] ? 1 : 0;
-          break;
-        //NOTE shifting are ambiguous instructions, might want to have configurable behaviour, see enum defintion.
-        case Operation::SHR:
-          {
-            u8 borrow = (ctx.registers[X] & 0x1) ? 1 : 0;
-            u8 result = ctx.registers[X] >> 1;
-            ctx.registers[X] = result;
-            ctx.VF = borrow;
-          }
-          break;
-        case Operation::SHL:
-          {
-            u8 borrow = (ctx.registers[X] & 0x80) ? 1 : 0;
-            u8 result = ctx.registers[X] << 1;
-            ctx.registers[X] = result;
-            ctx.VF = borrow;
-          }
-          break;
-        case Operation::LDX_IMM:
-          ctx.registers[X] = NN;
-          break;
-        case Operation::ADDX_IMM:
-          ctx.registers[X] += NN;
-          break;
-        case Operation::SETI:
-          ctx.indexRegister = NNN;
-          break;
-        case Operation::JPOFFSET:
-          ctx.PC = NNN + ctx.V0;
-          break;
-        case Operation::RND:
-          {
-            u8 rand = (u8)(std::rand() % 255);
-            ctx.registers[X] = NN & rand;//TODO: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM points to the instruction AND of the chip8. but https://tobiasvl.github.io/blog/write-a-chip-8-emulator/ doesn't mention it. I wonder if the behaviour is supposed to match the regular instruction (i.e. set the VF register)
+            // if(ctx.indexRegister + ctx.registers[X] > 0x1000){
+            //   ctx.VF = 1;
+            // }
+            ctx.indexRegister += ctx.registers[X];
             break;
-          }
-        default:
-          std::cout << "Could not preform instruction " << std::hex << inst << std::endl; 
-          break;
+          case Operation::LD_KEY:
+            if(ctx.getKey && ctx.getKeyPressed <= 0xF){
+              ctx.registers[X] = ctx.getKeyPressed;
+              ctx.getKeyPressed = 0xFF; //Set back to invalid value.
+              ctx.getKey = false;
+            }
+            else{
+              ctx.getKey = true;
+              ctx.PC -= 2;
+            }
+            break;
+          case Operation::LD_FONT:
+            ctx.indexRegister = (ctx.registers[X] & 0xF)*BYTES_PER_FONT;
+            break;
+          case Operation::BCD:
+            {
+              u8 b = ctx.registers[X];
+              i8 i = 2;
+              while(i >= 0){
+                ctx.ram[ctx.indexRegister + i--] = b%10;
+                b /= 10;
+              }
+            }
+            break;
+          case Operation::ST_MEM:
+            for(u8 i = 0; i <= X; i++){
+              ctx.ram[ctx.indexRegister + i] = ctx.registers[i];
+            }
+            break;
+          case Operation::LD_MEM:
+            for(u8 i = 0; i <= X; i++){
+              ctx.registers[i] = ctx.ram[ctx.indexRegister + i];
+            }
+            break;
+          case Operation::CALL:
+            ctx.stack.Push(ctx.PC);
+            ctx.PC = NNN;
+            break;
+          case Operation::SE_IMM:
+            if(ctx.registers[X] == NN){
+              ctx.PC += 2;
+            }
+            break;
+          case Operation::SNE_IMM:
+            if(ctx.registers[X] != NN){
+              ctx.PC += 2;
+            }
+            break;
+          case Operation::SE_REG:
+            if(ctx.registers[X] == ctx.registers[Y]){
+              ctx.PC += 2;
+            }
+            break;
+          case Operation::SNE_REG:
+            if(ctx.registers[X] != ctx.registers[Y]){
+              ctx.PC += 2;
+            }
+            break;
+          case Operation::JP:
+            ctx.PC = NNN;
+            break;
+          case Operation::DRAW:
+            DrawDisplay(renderer, ctx, X, Y, N);
+            break;
+          //---- 0x8000 instructions, need to mask last nibble aswell
+          case Operation::LDX_REG:
+            ctx.registers[X] = ctx.registers[Y];
+            break;
+          //NOTE: the and, or and xor instructions set VF to 0.
+          case Operation::ORX_REG:
+            ctx.registers[X] |= ctx.registers[Y];
+            // ctx.VF = 0;
+            break;
+          case Operation::ANDX_REG:
+            ctx.registers[X] &= ctx.registers[Y];
+            // ctx.VF = 0;
+            break;
+          case Operation::XORX_REG:
+            ctx.registers[X] ^= ctx.registers[Y];
+            // ctx.VF = 0;
+            break;
+          case Operation::ADDX_REG:
+            {
+              u16 sum = (u16)ctx.registers[X] + (u16)ctx.registers[Y];
+              ctx.registers[X] = (u8)sum;
+              ctx.VF = sum > 255 ? 1 : 0;
+            }
+            break;
+          case Operation::SUB_REG:
+            {
+              const u8 notBorrow = ctx.registers[X] >= ctx.registers[Y] ? 1 : 0;//NOTE: For some reason >= fixes rom number 4 even though the spec says it should set VF only on x > y...
+              const u8 diff = ctx.registers[X] - ctx.registers[Y];
+              ctx.registers[X] = diff;
+              ctx.VF = notBorrow;
+            }
+            break;
+          case Operation::SUBN_REG:
+            ctx.registers[X] = ctx.registers[Y] - ctx.registers[X];
+            ctx.VF =  ctx.registers[X] < ctx.registers[Y] ? 1 : 0;
+            break;
+          //NOTE shifting are ambiguous instructions, might want to have configurable behaviour, see enum defintion.
+          case Operation::SHR:
+            {
+              u8 borrow = (ctx.registers[X] & 0x1) ? 1 : 0;
+              u8 result = ctx.registers[X] >> 1;
+              ctx.registers[X] = result;
+              ctx.VF = borrow;
+            }
+            break;
+          case Operation::SHL:
+            {
+              u8 borrow = (ctx.registers[X] & 0x80) ? 1 : 0;
+              u8 result = ctx.registers[X] << 1;
+              ctx.registers[X] = result;
+              ctx.VF = borrow;
+            }
+            break;
+          case Operation::LDX_IMM:
+            ctx.registers[X] = NN;
+            break;
+          case Operation::ADDX_IMM:
+            ctx.registers[X] += NN;
+            break;
+          case Operation::SETI:
+            ctx.indexRegister = NNN;
+            break;
+          case Operation::JPOFFSET:
+            ctx.PC = NNN + ctx.V0;
+            break;
+          case Operation::RND:
+            {
+              u8 rand = (u8)(std::rand() % 255);
+              ctx.registers[X] = NN & rand;//TODO: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM points to the instruction AND of the chip8. but https://tobiasvl.github.io/blog/write-a-chip-8-emulator/ doesn't mention it. I wonder if the behaviour is supposed to match the regular instruction (i.e. set the VF register)
+              break;
+            }
+          default:
+            std::cout << "Could not preform instruction " << std::hex << inst << std::endl; 
+            break;
+        }
+        ctx.instructionsPerformed++;
       }
-      ctx.instructionPerformed++;
       emulate = false;
+      ctx.instructionsPerformed = 0;
     }
 	}
 
