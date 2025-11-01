@@ -571,10 +571,13 @@ int main(int argc, char* argv[]) {
   u64 counterFrequency = SDL_GetPerformanceFrequency();
   u64 lastFrame = SDL_GetPerformanceCounter();
   f64 lastTimerTick = 0.0;
-  constexpr f64 msPerTimerTick = (1.0/60.0) * 1000.0;
-  constexpr u32 INST_PER_SECOND = 700;//TODO: https://tobiasvl.github.io/blog/write-a-chip-8-emulator/ claims the speed should be reconfigurable because of different processors it ran on. but it also says a "standard" speed of 700 instructions per second fits well enough for chip8 programs.
+  constexpr u32 FRAME_RATE = 60;
+  constexpr f64 msPerTimerTick = (1.0/FRAME_RATE) * 1000.0;
+  constexpr u32 TICK_RATE = 1000;//NOTE: games and different implemenations might have a different tick rate. Tick rate results in TICK_RATE * FRAME_RATE for instructions per second. https://github.com/chip-8/chip-8-database 
+  constexpr u64 INSTRUCTIONS_PER_SECOND = FRAME_RATE * TICK_RATE;
   f64 emulationTimer = 0.0;
-  f64 msPerInst = (1.0/INST_PER_SECOND) * 1000;
+  f64 msPerInst = (1.0/(INSTRUCTIONS_PER_SECOND)) * 1000;
+  std::cout << "msPerInst: " << msPerInst << std::endl;
 	// Main loop
 	while (!quit) {
     //Timer ticks
@@ -753,15 +756,15 @@ int main(int argc, char* argv[]) {
         //NOTE: the and, or and xor instructions set VF to 0.
         case Operation::ORX_REG:
           ctx.registers[X] |= ctx.registers[Y];
-          ctx.VF = 0;
+          // ctx.VF = 0;
           break;
         case Operation::ANDX_REG:
           ctx.registers[X] &= ctx.registers[Y];
-          ctx.VF = 0;
+          // ctx.VF = 0;
           break;
         case Operation::XORX_REG:
           ctx.registers[X] ^= ctx.registers[Y];
-          ctx.VF = 0;
+          // ctx.VF = 0;
           break;
         case Operation::ADDX_REG:
           {
