@@ -422,6 +422,7 @@ Operation GetOperation(u16 inst)
 //Also currently draws each point to the screen separately, should use a texture instead. 
 void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
 {
+  ctx.VF = 0;//Set VF to 0, set to 1 if it causes any pixel to erase.
   u8 x = ctx.registers[X] % CHIP8_DISPLAY_WIDTH;
   u8 y = ctx.registers[Y] % CHIP8_DISPLAY_HEIGHT;
   u8 countBytes = N;
@@ -432,6 +433,9 @@ void DrawDisplay(SDL_Renderer* renderer, Chip8Context& ctx, u8 X, u8 Y, u8 N)
       u8 cellX = x+7-pixel;//Draw from most significant bit to least significant bit
       u8 cellY = y+row;
       if(cellX < CHIP8_DISPLAY_WIDTH && cellY < CHIP8_DISPLAY_HEIGHT){
+        if(ctx.display[cellY][cellX] && color){//Set VF to 1 if turns off a pixel.
+          ctx.VF = 1;
+        }
         ctx.display[cellY][cellX] ^= color;
       }
     }
@@ -631,6 +635,7 @@ int main(int argc, char* argv[]) {
         Operation op = GetOperation(inst);
         assert(op != SENTINEL_OP);
         std::cout << "Preforming operation #" << cycle++ << ":"<< OperationToString.at(op) << std::endl;
+        std::cout << "X: " << +X << " Y: " << +Y << " N: " << +N << " NN: " << +NN << " NNN: " << +NNN << std::endl;
         switch(op){
           case Operation::CLS:
             // Clear screen with black
