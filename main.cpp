@@ -7,6 +7,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <cstdint>
+#include <string>
 #include <cstdlib>
 #include <fstream>
 #include <vector>
@@ -495,12 +496,21 @@ int main(int argc, char* argv[]) {
     std::cerr << "Need to supply CHIP8 emulator with a ROM." << std::endl;
     return 1;
   }
+
+  Chip8Context ctx = {0};
+  InitChip8Context(&ctx);
+  auto buffer = LoadROM(argv[1]);
+  for(unsigned char byte : buffer){
+    ctx.ram[ctx.PC++] = byte;
+  }
+  ctx.PC = 0x200;
+
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
 		return 1;
 	} 
 	SDL_Window* window = SDL_CreateWindow(
-		"SDL2 Template",
+		(std::string("Chip8 ") + std::string(argv[1])).c_str(),
 		SDL_WINDOWPOS_CENTERED,
 		SDL_WINDOWPOS_CENTERED,
 		SCREEN_WIDTH,
@@ -549,13 +559,6 @@ int main(int argc, char* argv[]) {
 
 
 
-  Chip8Context ctx = {0};
-  InitChip8Context(&ctx);
-  auto buffer = LoadROM(argv[1]);
-  for(unsigned char byte : buffer){
-    ctx.ram[ctx.PC++] = byte;
-  }
-  ctx.PC = 0x200;
 
 
 
@@ -577,7 +580,7 @@ int main(int argc, char* argv[]) {
   f64 lastTimerTick = 0.0;
   constexpr u32 FRAME_RATE = 60;//60Hz refresh rate
   constexpr f64 msPerTimerTick = (1.0/FRAME_RATE) * 1000.0;
-  constexpr u32 TICK_RATE = 11;//NOTE: games and different implemenations might have a different tick rate. Tick rate results in TICK_RATE * FRAME_RATE for instructions per second. https://github.com/chip-8/chip-8-database 
+  constexpr u32 TICK_RATE = 30;//NOTE: games and different implemenations might have a different tick rate. Tick rate results in TICK_RATE * FRAME_RATE for instructions per second. https://github.com/chip-8/chip-8-database 
   u64 instructionsPerFrame = 0;
 	// Main loop
 	while (!quit) {
